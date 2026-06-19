@@ -1,0 +1,114 @@
+# conta-tools-nfse — Emissão de NFS-e
+
+## Antes de qualquer implementação
+
+1. Leia `C:\dev\conta-tools-shared\CLAUDE.md` — regras globais do ecossistema
+2. Leia `C:\dev\conta-tools-shared\CONTEXT.md` — o que o shared já oferece
+3. Leia `C:\dev\conta-tools-nfse\CONTEXT.md` — o que este repo já tem implementado
+4. Leia `C:\dev\conta-tools-shared\docs\IMPLEMENTATION-PLAN-whatsapp-nfse.md` — plano geral
+
+---
+
+## O que esta ferramenta faz
+
+Emite NFS-e (Nota Fiscal de Serviços Eletrônica) via webservices SOAP das prefeituras,
+a partir de uma planilha Excel com os dados das notas.
+
+Municípios suportados:
+- **Campinas**: padrão ABRASF 2.03
+- **São Paulo**: padrão próprio SP, layout v2 com campos IBS/CBS (Reforma Tributária)
+
+---
+
+## CLI
+
+```
+# Gerar template da planilha
+python -m conta_tools_nfse campinas template --saida template.xlsx
+
+# Emitir notas da planilha
+python -m conta_tools_nfse campinas emitir \
+    --planilha notas.xlsx \
+    --cert /caminho/cert.pfx \
+    --inscricao-municipal 123456 \
+    [--ambiente homologacao|producao]   # default: producao
+    [--saida resultado.xlsx]
+```
+
+### Regras do CLI
+
+- **Senha do certificado**: sempre via env `CONTA_TOOLS_CERT_PASSWORD` — nunca como argumento CLI, nunca em log
+- **CNPJ do prestador**: extraído automaticamente do certificado
+- **Competência**: obrigatória na planilha (coluna `competencia`, formato `MM/AAAA`) — sem default
+- **Ambiente default**: `producao` — precisa passar `--ambiente homologacao` explicitamente para testes
+
+---
+
+## Webservices
+
+### Campinas — ABRASF 2.03
+| Ambiente | URL |
+|---|---|
+| Produção | `https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl` |
+| Homologação | `https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl` |
+
+- Operação: `RecepcionarLoteRpsSincrono(nfseCabecMsg, nfseDadosMsg)`
+- Namespace XML: `http://www.abrasf.org.br/nfse.xsd`
+- Código IBGE Campinas: `3509502`
+
+### São Paulo — Layout v2 (pendente implementação)
+| Ambiente | URL |
+|---|---|
+| Produção síncrono | `https://nfews.prefeitura.sp.gov.br/lotenfe.asmx?WSDL` |
+
+---
+
+## Estrutura dos módulos
+
+```
+src/conta_tools_nfse/
+  drivers/
+    base.py        # NfseDriver (ABC): emitir(), cancelar()
+    campinas.py    # CampinasDriver — ABRASF 2.03
+    sao_paulo.py   # SaoPauloDriver — layout v2 (futuro)
+  excel/
+    columns.py     # definição das colunas (compartilhada entre template e reader)
+    template.py    # gera o .xlsx template para preenchimento
+    reader.py      # lê a planilha e devolve lista de NfseRequest
+  cli/
+    campinas.py    # parser argparse + orquestração para Campinas
+```
+
+---
+
+## O que usa do conta-tools-shared
+
+| Necessidade | Módulo shared |
+|---|---|
+| Tipos de dados | `conta_tools_shared.domain.nfse` |
+| Assinatura XML | `conta_tools_shared.nfse.signer.assinar_xml` |
+| SOAP transport com cert | `conta_tools_shared.nfse.transport.soap_transport` |
+| Senha do cert (env) | `conta_tools_shared.auth.certificate.cert_password_from_env` |
+| CNPJ do cert | `conta_tools_shared.auth.certificate.cnpj_from_certificate` |
+| Log formatado | `conta_tools_shared.logging.formatter` |
+| Flags --version/--about | `conta_tools_shared.version.handle_version_flags` |
+
+Instalação dev: `pip install -e ../conta-tools-shared[nfse]`
+
+---
+
+## Versionamento
+
+Contrato completo: `C:\dev\conta-tools-launcher\docs\VERSIONING.md`
+
+**Regra obrigatória:** a cada round de alteração, incrementar PATCH no `pyproject.toml`.
+
+---
+
+## Convenções específicas deste repo
+
+- O XML de cada RPS é montado manualmente com `lxml.etree` — sem geração automática via WSDL
+- A assinatura digital é enveloped no elemento `InfDeclaracaoPrestacaoServico` (Id="rps1")
+- Cada driver tem um método `_montar_inf_rps(req)` que retorna bytes do XML não-assinado
+- Testes de integração contra endpoints de homologação ficam em `tests/integration/` e são marcados com `@pytest.mark.integration`
+- Testes unitários não fazem chamadas HTTP — usam XML de exemplo fixo

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conta-tools-nfse"
+version = "0.1.0"
+description = "Emissão de NFS-e via webservices SOAP das prefeituras"
+requires-python = ">=3.11"
+authors = [{ name = "Eric Mauricio" }]
+dependencies = [
+    "conta-tools-shared[nfse]",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = ["integration: testes contra endpoints reais (requer certificado e acesso à internet)"]
