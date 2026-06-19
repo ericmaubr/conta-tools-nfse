@@ -14,7 +14,8 @@ COLUNAS_OBRIGATORIAS = [
 # Pelo menos uma das duas deve estar preenchida por linha
 COLUNAS_TOMADOR_ID = ["tomador_cnpj", "tomador_cpf"]
 
-COLUNAS_OPCIONAIS = [
+# Opcionais compartilhadas entre todos os municípios
+COLUNAS_OPCIONAIS_COMUNS = [
     "data_emissao",
     "tomador_inscricao_municipal",
     "tomador_email",
@@ -28,12 +29,30 @@ COLUNAS_OPCIONAIS = [
     "deducoes",
     "iss_retido",
     "optante_simples",
+]
+
+# Opcionais específicas do formato ABRASF (Campinas e outros municípios)
+COLUNAS_OPCIONAIS_ABRASF = [
     "natureza_operacao",
     "codigo_cnae",
 ]
 
+COLUNAS_OPCIONAIS = COLUNAS_OPCIONAIS_COMUNS + COLUNAS_OPCIONAIS_ABRASF  # backward compat
+
+# Campinas: usa o conjunto completo (ABRASF)
 TODAS_COLUNAS = (
     COLUNAS_OBRIGATORIAS + COLUNAS_TOMADOR_ID + COLUNAS_OPCIONAIS
+)
+
+# São Paulo: obrigatória extra (alíquota) e opcional extra (tributação)
+COLUNAS_SP_OBRIGATORIAS = ["aliquota_servicos"]
+COLUNAS_SP_OPCIONAIS = ["tributacao_rps"]
+
+TODAS_COLUNAS_SP = (
+    COLUNAS_OBRIGATORIAS + COLUNAS_SP_OBRIGATORIAS
+    + COLUNAS_TOMADOR_ID
+    + COLUNAS_OPCIONAIS_COMUNS
+    + COLUNAS_SP_OPCIONAIS
 )
 
 # Cabeçalhos legíveis para o template
@@ -41,7 +60,7 @@ DESCRICOES: dict[str, str] = {
     "numero_rps": "Número RPS *",
     "competencia": "Competência (MM/AAAA) *",
     "discriminacao": "Discriminação do Serviço *",
-    "codigo_servico": "Código do Serviço LC116 *",
+    "codigo_servico": "Código do Serviço *",
     "valor_servico": "Valor dos Serviços (R$) *",
     "tomador_razao_social": "Razão Social do Tomador *",
     "tomador_cnpj": "CNPJ do Tomador *",
@@ -61,6 +80,9 @@ DESCRICOES: dict[str, str] = {
     "optante_simples": "Optante Simples Nacional? (S/N)",
     "natureza_operacao": "Natureza Operação (1=Município, 2=Fora)",
     "codigo_cnae": "Código CNAE",
+    # SP-específico
+    "aliquota_servicos": "Alíquota ISS (%) *",
+    "tributacao_rps": "Tributação RPS (T/F/J/A/B/M)",
 }
 
 EXEMPLO: dict[str, object] = {
@@ -87,4 +109,15 @@ EXEMPLO: dict[str, object] = {
     "optante_simples": "N",
     "natureza_operacao": 1,
     "codigo_cnae": "",
+    # SP-específico
+    "aliquota_servicos": 5.00,
+    "tributacao_rps": "T",
+}
+
+EXEMPLO_SP: dict[str, object] = {
+    **EXEMPLO,
+    "codigo_servico": "07498",   # código SP de 5 dígitos (ex: 07498 = consultoria em TI)
+    "tomador_municipio_ibge": "3550308",
+    "aliquota_servicos": 5.00,
+    "tributacao_rps": "T",
 }

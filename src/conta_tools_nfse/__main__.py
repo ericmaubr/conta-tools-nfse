@@ -24,9 +24,13 @@ def main() -> None:
         from conta_tools_nfse.cli.campinas import main_campinas
 
         sys.exit(main_campinas(resto))
+    elif municipio in ("sao_paulo", "sp"):
+        from conta_tools_nfse.cli.sao_paulo import main_sao_paulo
+
+        sys.exit(main_sao_paulo(resto))
     else:
         print(f"Município não suportado: {municipio}")
-        print("Disponíveis: campinas")
+        print("Disponíveis: campinas, sao_paulo")
         sys.exit(1)
 
 
@@ -35,6 +39,7 @@ def _uso() -> None:
     print()
     print("Municípios:")
     print("  campinas    Prefeitura de Campinas (ABRASF 2.03)")
+    print("  sao_paulo   Prefeitura de São Paulo (formato SP)")
     print()
     print("Subcomandos:")
     print("  template    Gera planilha Excel de exemplo")
