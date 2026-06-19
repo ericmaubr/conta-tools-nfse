@@ -1,0 +1,17 @@
+# Configurações com credenciais — nunca versionar
+*.conf
+!empresa_exemplo.conf
+
+# Certificados
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/

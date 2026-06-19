@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-from conta_tools_shared.auth.certificate import (
-    cert_password_from_env,
-    cnpj_from_certificate,
-    load_pfx_data,
-)
+from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
 from conta_tools_shared.logging import formatter as log
 from conta_tools_shared.version import handle_version_flags
 
+from conta_tools_nfse.conf import carregar_conf
 from conta_tools_nfse.drivers.campinas import CampinasDriver
 from conta_tools_nfse.excel.reader import ler_planilha_campinas, salvar_resultado
 from conta_tools_nfse.excel.template import criar_template_campinas
@@ -43,15 +39,12 @@ def main_campinas(argv: list[str] | None = None) -> int:
     # --- emitir ---
     emit = sub.add_parser("emitir", help="Emite as notas a partir de uma planilha")
     emit.add_argument("--planilha", required=True, type=Path, metavar="XLSX")
-    emit.add_argument("--cert", required=True, type=Path, metavar="PFX",
-                      help="Certificado digital A1 (.pfx). Senha via CONTA_TOOLS_CERT_PASSWORD")
-    emit.add_argument("--inscricao-municipal", required=True, metavar="IM",
-                      help="Inscrição municipal do prestador em Campinas")
     emit.add_argument(
-        "--ambiente",
-        choices=["producao", "homologacao"],
-        default="producao",
-        help="Ambiente do webservice (default: producao)",
+        "--conf",
+        required=True,
+        type=Path,
+        metavar="CONF",
+        help="Arquivo .conf do prestador (cert, inscrição municipal, senha, ambiente)",
     )
     emit.add_argument(
         "--saida",
@@ -78,14 +71,19 @@ def _cmd_template(args: argparse.Namespace) -> int:
 
 
 def _cmd_emitir(args: argparse.Namespace) -> int:
-    # 1. Carregar certificado
-    cert_senha = cert_password_from_env()
-    if not cert_senha:
-        log.log_erro("Variável de ambiente CONTA_TOOLS_CERT_PASSWORD não definida.")
+    # 1. Carregar configuração
+    try:
+        conf = carregar_conf(args.conf)
+    except Exception as e:
+        log.log_erro(f"Erro ao ler configuração: {e}")
         return 1
 
+    if conf.ambiente == "homologacao":
+        log.log_aviso("ATENÇÃO: executando em ambiente de HOMOLOGAÇÃO.")
+
+    # 2. Carregar certificado e extrair CNPJ
     try:
-        cert_data = load_pfx_data(args.cert, cert_senha)
+        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
     except Exception as e:
         log.log_erro(f"Erro ao carregar certificado: {e}")
         return 1
@@ -96,17 +94,15 @@ def _cmd_emitir(args: argparse.Namespace) -> int:
         return 1
 
     log.log_info(f"Certificado carregado — CNPJ prestador: {prestador_cnpj}")
-    if args.ambiente == "homologacao":
-        log.log_aviso("ATENÇÃO: executando em ambiente de HOMOLOGAÇÃO.")
 
-    # 2. Ler planilha
+    # 3. Ler planilha
     try:
         pedidos, erros_leitura = ler_planilha_campinas(
             args.planilha,
             prestador_cnpj,
-            args.inscricao_municipal,
-            args.cert,
-            cert_senha,
+            conf.inscricao_municipal,
+            conf.cert_path,
+            conf.cert_senha,
         )
     except Exception as e:
         log.log_erro(f"Erro ao ler planilha: {e}")
@@ -121,8 +117,8 @@ def _cmd_emitir(args: argparse.Namespace) -> int:
 
     log.log_info(f"{len(pedidos)} nota(s) a emitir.")
 
-    # 3. Emitir
-    driver = CampinasDriver(ambiente=args.ambiente)
+    # 4. Emitir
+    driver = CampinasDriver(ambiente=conf.ambiente)
     resultados = []
     for req in pedidos:
         try:
@@ -136,7 +132,7 @@ def _cmd_emitir(args: argparse.Namespace) -> int:
             log.log_erro(f"RPS {req.numero_rps}: {e}")
             resultados.append((req, None, str(e)))
 
-    # 4. Salvar resultado
+    # 5. Salvar resultado
     saida = args.saida or args.planilha.with_stem(args.planilha.stem + "_resultado")
     try:
         salvar_resultado(args.planilha, saida, resultados)

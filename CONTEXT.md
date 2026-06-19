@@ -4,6 +4,27 @@
 
 ---
 
+## Configuração (`conta_tools_nfse.conf`)
+
+### `conf.py` — Leitura do arquivo .conf do prestador
+- `NfseConf(cert_path, inscricao_municipal, cert_senha, ambiente)`
+- `carregar_conf(caminho: Path) -> NfseConf`
+- Prioridade da senha: campo `senha` no conf > env `CONTA_TOOLS_CERT_PASSWORD`
+- Valida obrigatoriedade de `cert` e `inscricao_municipal`; valida valor de `ambiente`
+
+Formato do arquivo `.conf`:
+```ini
+[prestador]
+cert                = C:\certs\empresa.pfx
+inscricao_municipal = 123456
+senha               = ...       ; opcional se CONTA_TOOLS_CERT_PASSWORD estiver definida
+
+[nfse]
+ambiente = producao             ; ou homologacao
+```
+
+---
+
 ## CLI (`conta_tools_nfse`)
 
 ### `__main__.py` — Entry point
