@@ -13,9 +13,9 @@ def main() -> None:
         sys.exit(code)
 
     argv = sys.argv[1:]
-    if not argv:
+    if not argv or argv[0] in ("-h", "--help"):
         _uso()
-        sys.exit(1)
+        sys.exit(0 if argv else 1)
 
     municipio = argv[0].lower()
     resto = argv[1:]
