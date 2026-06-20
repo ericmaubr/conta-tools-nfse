@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -17,7 +18,22 @@ from conta_tools_nfse.excel.columns import (
     COLUNAS_OBRIGATORIAS,
     COLUNAS_SP_OBRIGATORIAS,
     COLUNAS_TOMADOR_ID,
+    DESCRICOES,
 )
+
+
+def _limpar_header(h: str) -> str:
+    """Remove acentos, asteriscos, parênteses e dicas de formato do cabeçalho."""
+    h = re.sub(r"[*()]|mm/aaaa|dd/mm/aaaa|r\$|s/n|s ou n|%", "", h.lower()).strip()
+    h = "".join(c for c in unicodedata.normalize("NFD", h) if unicodedata.category(c) != "Mn")
+    return h.strip()
+
+
+# Mapeamento reverso: descrição legível (limpa) → nome programático da coluna
+# Permite reconhecer cabeçalhos gerados pelo template (ex: "Número RPS *" → "numero_rps")
+_HEADER_TO_COL: dict[str, str] = {
+    _limpar_header(desc): col_name for col_name, desc in DESCRICOES.items()
+}
 
 
 _TODAS_COLUNAS_CAMPINAS = [
@@ -36,17 +52,28 @@ _TODAS_COLUNAS_SP_OPCIONAIS = [
 
 
 def _mapear_colunas(ws, colunas_busca: list[str]) -> dict[str, int]:
-    """Mapeia nomes de coluna para índice (1-based) usando cabeçalhos da linha 1."""
+    """Mapeia nomes de coluna para índice (1-based) usando cabeçalhos da linha 1.
+
+    Reconhece tanto nomes programáticos ("numero_rps") quanto descrições legíveis
+    geradas pelo template ("Número RPS *").
+    """
     cabecalhos_raw = [
         (ws.cell(1, c).value or "").strip().lower()
         for c in range(1, ws.max_column + 1)
     ]
     cabecalhos = [re.sub(r"[*()]|mm/aaaa|dd/mm/aaaa|r\$|s/n|s ou n|%", "", h).strip() for h in cabecalhos_raw]
+    cabecalhos_limpos = [_limpar_header(h) for h in cabecalhos_raw]
 
     col_map: dict[str, int] = {}
-    for idx, h in enumerate(cabecalhos, start=1):
+    for idx, (h, h_limpo) in enumerate(zip(cabecalhos, cabecalhos_limpos), start=1):
         for col_name in colunas_busca:
+            # 1) Matching por nome programático (backward compat)
             if col_name in h or h in col_name:
+                if col_name not in col_map:
+                    col_map[col_name] = idx
+                break
+            # 2) Matching por descrição legível do template (ex: "Número RPS *")
+            if _HEADER_TO_COL.get(h_limpo) == col_name:
                 if col_name not in col_map:
                     col_map[col_name] = idx
                 break
@@ -322,16 +349,23 @@ def ler_planilha_sp(
 
 
 def _parse_competencia(valor: str) -> str:
-    """Converte MM/AAAA → AAAA-MM. Retorna '' se inválido."""
+    """Converte MM/AAAA → AAAA-MM. Aceita também datas ISO (YYYY-MM-DD) do Excel."""
     if not valor:
         return ""
-    m = re.fullmatch(r"(\d{1,2})[/\-](\d{4})", valor.strip())
-    if not m:
-        return ""
-    mes, ano = int(m.group(1)), int(m.group(2))
-    if not (1 <= mes <= 12):
-        return ""
-    return f"{ano}-{mes:02d}"
+    v = valor.strip()
+    # Formato esperado pelo usuário: MM/AAAA ou MM-AAAA
+    m = re.fullmatch(r"(\d{1,2})[/\-](\d{4})", v)
+    if m:
+        mes, ano = int(m.group(1)), int(m.group(2))
+        if 1 <= mes <= 12:
+            return f"{ano}-{mes:02d}"
+    # Formato retornado pelo openpyxl quando a célula é data Excel: YYYY-MM-DD [HH:MM:SS]
+    m = re.match(r"(\d{4})-(\d{2})-\d{2}", v)
+    if m:
+        ano, mes = int(m.group(1)), int(m.group(2))
+        if 1 <= mes <= 12:
+            return f"{ano}-{mes:02d}"
+    return ""
 
 
 def _parse_data(valor: str) -> str:
