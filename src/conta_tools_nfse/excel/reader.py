@@ -209,9 +209,9 @@ def ler_planilha_campinas(
             codigo_cnae=cel("codigo_cnae"),
         )
 
-        print("--- NfseRequest ---")
-        print(req)
-        print("-" * 40)
+        ##print("--- NfseRequest ---")
+        ##print(req)
+        ##print("-" * 40)
 
         pedidos.append(req)
 
