@@ -43,9 +43,14 @@ def _uso() -> None:
     print()
     print("Subcomandos:")
     print("  template    Gera planilha Excel de exemplo")
-    print("  emitir      Emite notas a partir da planilha")
+    print("    --saida XLSX        Caminho de saída (default: template_nfse_<municipio>.xlsx)")
     print()
-    print("Flags globais: --version, --about")
+    print("  emitir      Emite notas a partir da planilha")
+    print("    --planilha XLSX     Planilha de entrada (obrigatório)")
+    print("    --conf CONF         Arquivo .conf do prestador (obrigatório)")
+    print("    --saida XLSX        Planilha de saída (default: <planilha>_resultado.xlsx)")
+    print()
+    print("Flags globais: --version, --about, --help/-h")
 
 
 if __name__ == "__main__":
