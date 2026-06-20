@@ -1,6 +1,6 @@
 # Configurações com credenciais — nunca versionar
 *.conf
-!empresa_exemplo.conf
+!example.conf
 
 # Certificados
 *.pfx
