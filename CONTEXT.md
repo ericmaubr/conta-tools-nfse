@@ -60,9 +60,14 @@ ambiente = producao             ; ou homologacao
 
 ### `drivers/campinas.py` — Campinas ABRASF 2.03
 - `CampinasDriver(ambiente="producao")`
+- WSDL homologação: `https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl`
 - WSDL produção: `https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl`
-- Operação: `RecepcionarLoteRpsSincrono(nfseCabecMsg, nfseDadosMsg)`
-- Assinatura: `assinar_xml()` (enveloped RSA-SHA1) no `InfDeclaracaoPrestacaoServico`
+- Binding: `document/literal`, `elementFormDefault="unqualified"` — **todos os elementos sem namespace**.
+- Operação: `RecepcionarLoteRpsSincrono` — parâmetro é `EnviarLoteRpsSincronoEnvio` **embutido como XML real** no SOAP body (não como string em `nfseDadosMsg`).
+- Assinatura: `assinar_elemento()` (C14N 1.0, RSA-SHA1) no `LoteRps` (Id="lote1"); `Signature` fica como irmão dentro de `EnviarLoteRpsSincronoEnvio`.
+- mTLS obrigatório: certificado A1 PFX do prestador usado tanto no transporte quanto na assinatura.
+- **CNAE com 9 dígitos**: apesar do padrão ABRASF dizer N(7), Campinas exige 9 dígitos (`CodigoCnae`). O driver normaliza automaticamente: 7 dígitos → adiciona `00` (ex: `6920601` → `692060100`). O template XML oficial de Campinas confirma 9 chars no `<CodigoCnae>`.
+- Debug: `NFSE_DEBUG_SOAP=<dir>` grava request/response XML no diretório indicado.
 
 ### `drivers/sao_paulo.py` — São Paulo formato SP
 - `SaoPauloDriver(ambiente="producao")`

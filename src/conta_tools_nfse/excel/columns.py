@@ -79,7 +79,7 @@ DESCRICOES: dict[str, str] = {
     "iss_retido": "ISS Retido? (S/N)",
     "optante_simples": "Optante Simples Nacional? (S/N)",
     "natureza_operacao": "Natureza Operação (1=Município, 2=Fora)",
-    "codigo_cnae": "Código CNAE",
+    "codigo_cnae": "Código CNAE (7 ou 9 dígitos)",
     # SP-específico
     "aliquota_servicos": "Alíquota ISS (%) *",
     "tributacao_rps": "Tributação RPS (T/F/J/A/B/M)",
@@ -108,7 +108,7 @@ EXEMPLO: dict[str, object] = {
     "iss_retido": "N",
     "optante_simples": "N",
     "natureza_operacao": 1,
-    "codigo_cnae": "",
+    "codigo_cnae": "6920601",
     # SP-específico
     "aliquota_servicos": 5.00,
     "tributacao_rps": "T",
