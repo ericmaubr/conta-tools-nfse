@@ -208,6 +208,11 @@ def ler_planilha_campinas(
             natureza_operacao=int(nat_op_raw) if nat_op_raw.isdigit() else 1,
             codigo_cnae=cel("codigo_cnae"),
         )
+
+        print("--- NfseRequest ---")
+        print(req)
+        print("-" * 40)
+
         pedidos.append(req)
 
     return pedidos, erros

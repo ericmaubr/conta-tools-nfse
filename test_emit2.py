@@ -61,6 +61,10 @@ driver = CampinasDriver(ambiente="homologacao")
 from conta_tools_shared.nfse.signer import assinar_elemento
 from lxml import etree
 
+print("=== Gerando SOAP para debug (sem enviar) ===")
+print(req)
+print("-" * 40)
+
 envio_el = driver._montar_envio_el(req, ns="")
 lote_el = envio_el.find("LoteRps")
 assinar_elemento(envio_el, lote_el, CERT, SENHA, reference_id="lote1")

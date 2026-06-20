@@ -55,6 +55,9 @@ class CampinasDriver(NfseDriverBase):
 
     def emitir(self, req: NfseRequest) -> NfseResult:
         # Monta XML sem namespace (WSDL: elementFormDefault=unqualified)
+        print("Montando XML de envio (sem namespace, conforme WSDL de Campinas).")
+        print(req)
+        print("-" * 40)
         envio_el = self._montar_envio_el(req, ns="")
         lote_el = envio_el.find("LoteRps")
 
