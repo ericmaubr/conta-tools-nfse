@@ -1,0 +1,400 @@
+"""FastAPI — servidor REST para emissão de NFS-e via interface web ou MCP."""
+
+from __future__ import annotations
+
+import calendar
+import re
+import uuid
+from datetime import date
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+
+from conta_tools_nfse.api.conf import ApiConf
+from conta_tools_nfse.conf import NfseConf, carregar_conf
+
+# ------------------------------------------------------------------ #
+# Estado de aplicação (preenchido por create_app)                     #
+# ------------------------------------------------------------------ #
+
+_api_conf: ApiConf | None = None
+_rps_cache: dict[str, int] = {}  # prestador_id → proximo_rps
+
+# ------------------------------------------------------------------ #
+# Helpers de autenticação                                             #
+# ------------------------------------------------------------------ #
+
+_security = HTTPBearer()
+
+
+def _verificar_token(
+    credentials: HTTPAuthorizationCredentials = Security(_security),
+) -> str:
+    assert _api_conf is not None
+    if credentials.credentials != _api_conf.bearer_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    return credentials.credentials
+
+
+# ------------------------------------------------------------------ #
+# Modelos Pydantic                                                     #
+# ------------------------------------------------------------------ #
+
+
+class PrestadorItem(BaseModel):
+    id: str
+    nome: str
+
+
+class PrestadorSchema(BaseModel):
+    id: str
+    nome: str
+    municipio: str
+    serie_rps: str
+    campos_extras: list[str]
+    campos_obrigatorios: list[str]
+
+
+class EmissaoRequest(BaseModel):
+    prestador_id: str
+    numero_rps: str
+    competencia: str          # "AAAA-MM"
+    discriminacao: str
+    codigo_servico: str
+    codigo_cnae: str = ""
+    codigo_tributacao_municipio: str = ""
+    valor_servico: str        # string — evita perda de precisão float
+    iss_retido: bool = False
+    valor_iss: str | None = None
+    tomador_razao_social: str
+    tomador_cnpj: str = ""
+    tomador_cpf: str = ""
+    tomador_email: str = ""
+    tomador_logradouro: str = ""
+    tomador_numero: str = ""
+    tomador_complemento: str = ""
+    tomador_bairro: str = ""
+    tomador_cep: str = ""
+    tomador_municipio_ibge: str = ""
+    tomador_uf: str = ""
+
+
+class EmissaoResponse(BaseModel):
+    status: str               # "ok" | "erro"
+    numero_nfse: str = ""
+    codigo_verificacao: str = ""
+    link_consulta: str = ""
+    rps_ajustado: dict[str, Any] | None = None
+    arquivo: str = ""
+    mensagem: str = ""
+
+
+# ------------------------------------------------------------------ #
+# Campos por município                                                 #
+# ------------------------------------------------------------------ #
+
+_CAMPOS_EXTRAS: dict[str, list[str]] = {
+    "campinas": ["codigo_cnae"],
+    "sao_paulo": [],
+}
+
+_CAMPOS_OBRIGATORIOS: dict[str, list[str]] = {
+    "campinas": ["codigo_servico", "codigo_cnae", "valor_servico", "competencia", "discriminacao"],
+    "sao_paulo": ["codigo_servico", "valor_servico", "competencia", "discriminacao"],
+}
+
+
+# ------------------------------------------------------------------ #
+# Helpers internos                                                     #
+# ------------------------------------------------------------------ #
+
+
+def _caminho_conf(prestador_id: str) -> Path:
+    assert _api_conf is not None
+    return _api_conf.prestadores_dir / f"{prestador_id}.conf"
+
+
+def _carregar_prestador(prestador_id: str) -> NfseConf:
+    caminho = _caminho_conf(prestador_id)
+    if not caminho.exists():
+        raise HTTPException(status_code=404, detail=f"Prestador não encontrado: {prestador_id}")
+    try:
+        return carregar_conf(caminho)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao ler configuração do prestador: {e}")
+
+
+def _nome_prestador(prestador_id: str, conf: NfseConf) -> str:
+    return conf.nome or prestador_id.replace("_", " ").title()
+
+
+def _get_proximo_rps(prestador_id: str, conf: NfseConf) -> int:
+    """Consulta o último RPS via SOAP e retorna próximo (com cache de sessão)."""
+    if prestador_id in _rps_cache:
+        return _rps_cache[prestador_id]
+
+    from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
+    from conta_tools_shared.domain.nfse import PrestadorNfse
+
+    try:
+        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
+        cnpj = cnpj_from_certificate(cert_data)
+        prestador = PrestadorNfse(
+            cnpj=cnpj,
+            inscricao_municipal=conf.inscricao_municipal,
+            cert_path=conf.cert_path,
+            cert_senha=conf.cert_senha,
+        )
+    except Exception:
+        return 1
+
+    driver = _make_driver(conf)
+    if driver is None or not hasattr(driver, "consultar_nfse_periodo"):
+        return 1
+
+    hoje = date.today()
+    ano, mes = hoje.year, hoje.month
+    for _ in range(3):
+        ultimo_dia = calendar.monthrange(ano, mes)[1]
+        data_ini = f"{ano}-{mes:02d}-01"
+        data_fim = f"{ano}-{mes:02d}-{ultimo_dia:02d}"
+        try:
+            resultado = driver.consultar_nfse_periodo(prestador, data_ini, data_fim)
+        except Exception:
+            resultado = {}
+        if resultado:
+            ultimo = max(int(v[0]) for v in resultado.values() if v[0].isdigit())
+            proximo = ultimo + 1
+            _rps_cache[prestador_id] = proximo
+            return proximo
+        mes -= 1
+        if mes == 0:
+            mes = 12
+            ano -= 1
+
+    _rps_cache[prestador_id] = 1
+    return 1
+
+
+def _make_driver(conf: NfseConf):
+    municipio = conf.municipio
+    if municipio == "campinas":
+        from conta_tools_nfse.drivers.campinas import CampinasDriver
+        return CampinasDriver(ambiente=conf.ambiente)
+    if municipio in ("sao_paulo", "sp"):
+        from conta_tools_nfse.drivers.sao_paulo import SaoPauloDriver
+        return SaoPauloDriver(ambiente=conf.ambiente)
+    return None
+
+
+def _salvar_xml(conf: NfseConf, tomador: str, numero: str, competencia: str, xml: bytes) -> str:
+    out_dir = conf.output_dir
+    if not out_dir:
+        return ""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^\w]", "_", tomador[:30]).strip("_")
+    comp = competencia.replace("-", "_")
+    filename = f"NF_{slug}_{numero}_{comp}.xml"
+    (out_dir / filename).write_bytes(xml)
+    return filename
+
+
+def _decimal(valor: str | None, campo: str) -> Decimal:
+    if not valor:
+        raise HTTPException(status_code=422, detail=f"Campo obrigatório ausente: {campo}")
+    try:
+        return Decimal(valor.replace(",", "."))
+    except InvalidOperation:
+        raise HTTPException(status_code=422, detail=f"Valor inválido para {campo}: {valor!r}")
+
+
+# ------------------------------------------------------------------ #
+# Rotas                                                               #
+# ------------------------------------------------------------------ #
+
+app = FastAPI(title="ContaTools NFS-e API", version="1.0")
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def index():
+    html_path = Path(__file__).parent / "static" / "index.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/prestadores", response_model=list[PrestadorItem])
+def list_prestadores(_token: str = Depends(_verificar_token)):
+    assert _api_conf is not None
+    resultado = []
+    for conf_path in sorted(_api_conf.prestadores_dir.glob("*.conf")):
+        pid = conf_path.stem
+        try:
+            conf = carregar_conf(conf_path)
+            nome = _nome_prestador(pid, conf)
+            resultado.append(PrestadorItem(id=pid, nome=nome))
+        except Exception:
+            pass
+    return resultado
+
+
+@app.get("/prestadores/{prestador_id}", response_model=PrestadorSchema)
+def get_prestador_schema(
+    prestador_id: str,
+    _token: str = Depends(_verificar_token),
+):
+    conf = _carregar_prestador(prestador_id)
+    municipio = conf.municipio or "campinas"
+    return PrestadorSchema(
+        id=prestador_id,
+        nome=_nome_prestador(prestador_id, conf),
+        municipio=municipio,
+        serie_rps=conf.serie_rps,
+        campos_extras=_CAMPOS_EXTRAS.get(municipio, []),
+        campos_obrigatorios=_CAMPOS_OBRIGATORIOS.get(municipio, []),
+    )
+
+
+@app.get("/prestadores/{prestador_id}/proximo-rps")
+def get_proximo_rps(
+    prestador_id: str,
+    _token: str = Depends(_verificar_token),
+):
+    conf = _carregar_prestador(prestador_id)
+    return {"proximo_rps": _get_proximo_rps(prestador_id, conf)}
+
+
+@app.post("/nfse", response_model=EmissaoResponse)
+def emitir_nfse(
+    req: EmissaoRequest,
+    _token: str = Depends(_verificar_token),
+):
+    from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
+    from conta_tools_shared.domain.nfse import NfseRequest, PrestadorNfse, TomadorNfse
+
+    conf = _carregar_prestador(req.prestador_id)
+
+    if not req.tomador_cnpj and not req.tomador_cpf:
+        raise HTTPException(status_code=422, detail="Informe CNPJ ou CPF do tomador.")
+    if not req.tomador_razao_social.strip():
+        raise HTTPException(status_code=422, detail="Razão social do tomador é obrigatória.")
+
+    try:
+        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
+        cnpj = cnpj_from_certificate(cert_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao carregar certificado: {e}")
+
+    prestador = PrestadorNfse(
+        cnpj=cnpj,
+        inscricao_municipal=conf.inscricao_municipal,
+        cert_path=conf.cert_path,
+        cert_senha=conf.cert_senha,
+    )
+
+    tomador = TomadorNfse(
+        razao_social=req.tomador_razao_social.strip(),
+        cnpj=re.sub(r"\D", "", req.tomador_cnpj),
+        cpf=re.sub(r"\D", "", req.tomador_cpf),
+        email=req.tomador_email.strip(),
+        logradouro=req.tomador_logradouro.strip(),
+        numero=req.tomador_numero.strip(),
+        complemento=req.tomador_complemento.strip(),
+        bairro=req.tomador_bairro.strip(),
+        cep=re.sub(r"\D", "", req.tomador_cep),
+        municipio_ibge=req.tomador_municipio_ibge.strip(),
+        uf=req.tomador_uf.strip().upper(),
+    )
+
+    municipio = conf.municipio or "campinas"
+    valor_servico = _decimal(req.valor_servico, "valor_servico")
+    valor_iss = _decimal(req.valor_iss, "valor_iss") if req.iss_retido and req.valor_iss else None
+
+    nfse_req = NfseRequest(
+        id=str(uuid.uuid4()),
+        prestador=prestador,
+        tomador=tomador,
+        discriminacao=req.discriminacao.strip(),
+        valor_servico=valor_servico,
+        codigo_servico=req.codigo_servico.strip(),
+        municipio_prestacao=municipio,  # type: ignore[arg-type]
+        competencia=req.competencia,
+        numero_rps=req.numero_rps,
+        serie_rps=conf.serie_rps,
+        iss_retido=req.iss_retido,
+        optante_simples=conf.optante_simples,
+        codigo_cnae=req.codigo_cnae.strip(),
+        codigo_tributacao_municipio=req.codigo_tributacao_municipio.strip(),
+        valor_iss=valor_iss,
+    )
+
+    driver = _make_driver(conf)
+    if driver is None:
+        raise HTTPException(status_code=400, detail=f"Município não suportado: {municipio}")
+
+    rps_ajustado: dict[str, Any] | None = None
+
+    try:
+        result = driver.emitir(nfse_req)
+    except RuntimeError as e:
+        err_str = str(e)
+        if "E10" in err_str or "RPS" in err_str.upper() and "utilizado" in err_str.lower():
+            # Auto-heal: busca último RPS e retenta
+            rps_original = req.numero_rps
+            try:
+                # Invalida cache e busca o último RPS real via SOAP
+                _rps_cache.pop(req.prestador_id, None)
+                proximo = _get_proximo_rps(req.prestador_id, conf)
+            except Exception:
+                raise HTTPException(status_code=500, detail=f"E10 e falha no auto-heal: {e}")
+            nfse_req.numero_rps = str(proximo)
+            try:
+                result = driver.emitir(nfse_req)
+                rps_ajustado = {"de": rps_original, "para": str(proximo)}
+            except RuntimeError as e2:
+                raise HTTPException(status_code=422, detail=str(e2))
+        else:
+            raise HTTPException(status_code=422, detail=err_str)
+
+    # Atualizar cache com próximo RPS após emissão bem-sucedida
+    try:
+        _rps_cache[req.prestador_id] = int(nfse_req.numero_rps) + 1
+    except ValueError:
+        pass
+
+    # Salvar XML
+    arquivo = ""
+    if result.xml_retorno:
+        try:
+            arquivo = _salvar_xml(
+                conf,
+                tomador.razao_social,
+                result.numero_nota,
+                req.competencia,
+                result.xml_retorno,
+            )
+        except Exception:
+            pass  # falha em salvar não deve interromper a resposta
+
+    return EmissaoResponse(
+        status="ok",
+        numero_nfse=result.numero_nota,
+        codigo_verificacao=result.codigo_verificacao,
+        link_consulta=result.link_consulta,
+        rps_ajustado=rps_ajustado,
+        arquivo=arquivo,
+    )
+
+
+# ------------------------------------------------------------------ #
+# Factory chamada por __main__.py                                      #
+# ------------------------------------------------------------------ #
+
+
+def create_app(api_conf: ApiConf) -> FastAPI:
+    global _api_conf
+    _api_conf = api_conf
+    return app

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContaTools — NFS-e</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      background: #f0f2f5;
+      color: #222;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a3c5e;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: .3px; }
+    header span { font-size: 12px; opacity: .65; }
+
+    main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #555;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    /* Token banner */
+    #token-banner { background: #fff8e1; border-left: 4px solid #f0a500; }
+    #token-banner h2 { color: #a07000; border-color: #f0d080; }
+    .token-row { display: flex; gap: 8px; align-items: center; }
+    #token-input {
+      flex: 1; padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px;
+      font-family: monospace; font-size: 13px;
+    }
+
+    /* Grid de campos */
+    .grid { display: grid; gap: 12px 16px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+    label { display: block; }
+    label span { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+    label span.req::after { content: " *"; color: #d00; }
+
+    input[type=text], input[type=email], input[type=number], input[type=month],
+    select, textarea {
+      width: 100%; padding: 7px 10px;
+      border: 1px solid #ccc; border-radius: 5px;
+      font-size: 14px; color: #222;
+      transition: border-color .15s;
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: #1a3c5e; box-shadow: 0 0 0 2px rgba(26,60,94,.12);
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    select { cursor: pointer; }
+
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .checkbox-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+    .checkbox-row label { cursor: pointer; font-size: 13px; }
+
+    /* Botão */
+    #btn-emitir {
+      display: block; width: 100%;
+      background: #1a3c5e; color: #fff;
+      border: none; border-radius: 6px;
+      padding: 12px; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+      margin-top: 4px;
+    }
+    #btn-emitir:hover { background: #245082; }
+    #btn-emitir:disabled { background: #999; cursor: not-allowed; }
+
+    /* Resultado */
+    #resultado {
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    #resultado.ok { background: #e8f5e9; border-left: 4px solid #2e7d32; }
+    #resultado.erro { background: #fdecea; border-left: 4px solid #c62828; }
+    #resultado h3 { font-size: 14px; margin-bottom: 8px; }
+    #resultado .detail { font-family: monospace; word-break: break-all; }
+    #resultado .aviso {
+      margin-top: 8px; padding: 6px 10px;
+      background: #fff8e1; border-radius: 4px;
+      font-size: 12px; color: #6b4c00;
+    }
+
+    /* loading spinner */
+    .spin {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+
+    /* RPS loading indicator */
+    .rps-loading { font-size: 11px; color: #888; margin-top: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ContaTools</h1>
+  <span>Emissão de NFS-e</span>
+</header>
+
+<main>
+
+  <!-- Token -->
+  <div class="card" id="token-banner">
+    <h2>Autenticação</h2>
+    <div class="token-row">
+      <input id="token-input" type="password" placeholder="Bearer token de acesso" autocomplete="off">
+      <button onclick="salvarToken()" style="padding:8px 16px;border-radius:5px;border:1px solid #1a3c5e;background:#1a3c5e;color:#fff;cursor:pointer;font-size:13px;">
+        Conectar
+      </button>
+      <button onclick="limparToken()" style="padding:8px 16px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:13px;">
+        Sair
+      </button>
+    </div>
+    <div id="token-status" style="margin-top:8px;font-size:12px;color:#888;"></div>
+  </div>
+
+  <!-- Resultado (aparece antes do form para ser visto sem scroll) -->
+  <div id="resultado" class="hidden"></div>
+
+  <!-- Formulário -->
+  <form id="form" class="hidden" onsubmit="submitForm(event)">
+
+    <!-- Prestador -->
+    <div class="card">
+      <h2>Prestador</h2>
+      <label>
+        <span class="req">Empresa emissora</span>
+        <select id="sel-prestador" required onchange="onPrestadorChange()">
+          <option value="">Selecione...</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- Dados da Nota -->
+    <div class="card hidden" id="sec-nf">
+      <h2>Dados da Nota</h2>
+      <div class="grid grid-3" style="margin-bottom:12px;">
+        <label>
+          <span class="req">Número do RPS</span>
+          <input type="number" id="numero_rps" name="numero_rps" min="1" required>
+          <div class="rps-loading hidden" id="rps-loading">buscando último RPS...</div>
+        </label>
+        <label>
+          <span class="req">Competência</span>
+          <input type="month" id="competencia" name="competencia" required>
+        </label>
+        <label>
+          <span class="req">Valor do serviço (R$)</span>
+          <input type="number" id="valor_servico" name="valor_servico" min="0.01" step="0.01" required>
+        </label>
+      </div>
+      <div class="grid grid-2" style="margin-bottom:12px;">
+        <label>
+          <span class="req">Código do serviço (LC 116)</span>
+          <input type="text" id="codigo_servico" name="codigo_servico" placeholder="ex: 1.07" required>
+        </label>
+        <label id="row-cnae" class="hidden">
+          <span class="req">CNAE (9 dígitos)</span>
+          <input type="text" id="codigo_cnae" name="codigo_cnae" placeholder="ex: 692060100" maxlength="9">
+        </label>
+        <label id="row-cod-trib">
+          <span>Código tributação municipal</span>
+          <input type="text" id="codigo_tributacao_municipio" name="codigo_tributacao_municipio">
+        </label>
+      </div>
+      <label style="margin-bottom:12px;">
+        <span class="req">Discriminação dos serviços</span>
+        <textarea id="discriminacao" name="discriminacao" required></textarea>
+      </label>
+      <div class="grid grid-2">
+        <div>
+          <div class="checkbox-row" style="margin-top:22px;">
+            <input type="checkbox" id="iss_retido" name="iss_retido" onchange="onIssRetidoChange()">
+            <label for="iss_retido">ISS Retido</label>
+          </div>
+        </div>
+        <label id="row-valor-iss" class="hidden">
+          <span>Valor retenção ISS (R$)</span>
+          <input type="number" id="valor_iss" name="valor_iss" min="0" step="0.01">
+        </label>
+      </div>
+    </div>
+
+    <!-- Dados do Tomador -->
+    <div class="card hidden" id="sec-tomador">
+      <h2>Dados do Tomador</h2>
+      <div class="grid grid-2" style="margin-bottom:12px;">
+        <label>
+          <span>CNPJ do tomador</span>
+          <input type="text" id="tomador_cnpj" name="tomador_cnpj" placeholder="00.000.000/0000-00" maxlength="18">
+        </label>
+        <label>
+          <span>CPF do tomador</span>
+          <input type="text" id="tomador_cpf" name="tomador_cpf" placeholder="000.000.000-00" maxlength="14">
+        </label>
+      </div>
+      <div class="grid grid-2" style="margin-bottom:12px;">
+        <label>
+          <span class="req">Razão social / Nome</span>
+          <input type="text" id="tomador_razao_social" name="tomador_razao_social" required>
+        </label>
+        <label>
+          <span>E-mail</span>
+          <input type="email" id="tomador_email" name="tomador_email">
+        </label>
+      </div>
+      <div class="grid grid-3" style="margin-bottom:12px;">
+        <label style="grid-column:span 2;">
+          <span>Logradouro</span>
+          <input type="text" id="tomador_logradouro" name="tomador_logradouro">
+        </label>
+        <label>
+          <span>Número</span>
+          <input type="text" id="tomador_numero" name="tomador_numero">
+        </label>
+      </div>
+      <div class="grid grid-4">
+        <label>
+          <span>Complemento</span>
+          <input type="text" id="tomador_complemento" name="tomador_complemento">
+        </label>
+        <label>
+          <span>Bairro</span>
+          <input type="text" id="tomador_bairro" name="tomador_bairro">
+        </label>
+        <label>
+          <span>CEP</span>
+          <input type="text" id="tomador_cep" name="tomador_cep" maxlength="9">
+        </label>
+        <label>
+          <span>UF</span>
+          <input type="text" id="tomador_uf" name="tomador_uf" maxlength="2" style="text-transform:uppercase;">
+        </label>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="card hidden" id="sec-actions">
+      <button type="submit" id="btn-emitir">Emitir NFS-e</button>
+    </div>
+
+  </form>
+
+</main>
+
+<script>
+  // ----------------------------------------------------------------
+  // Estado
+  // ----------------------------------------------------------------
+  let TOKEN = localStorage.getItem('nfse_token') || '';
+  let currentSchema = null;
+
+  // ----------------------------------------------------------------
+  // Token
+  // ----------------------------------------------------------------
+  function salvarToken() {
+    const v = document.getElementById('token-input').value.trim();
+    if (!v) return;
+    TOKEN = v;
+    localStorage.setItem('nfse_token', v);
+    inicializar();
+  }
+
+  function limparToken() {
+    TOKEN = '';
+    localStorage.removeItem('nfse_token');
+    document.getElementById('form').classList.add('hidden');
+    document.getElementById('token-status').textContent = '';
+    document.getElementById('token-input').value = '';
+    document.getElementById('resultado').classList.add('hidden');
+  }
+
+  // ----------------------------------------------------------------
+  // API helper
+  // ----------------------------------------------------------------
+  async function api(method, path, body) {
+    const opts = {
+      method,
+      headers: {
+        'Authorization': 'Bearer ' + TOKEN,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    };
+    const r = await fetch(path, opts);
+    const data = await r.json().catch(() => ({ detail: r.statusText }));
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    return data;
+  }
+
+  // ----------------------------------------------------------------
+  // Inicialização
+  // ----------------------------------------------------------------
+  async function inicializar() {
+    document.getElementById('token-status').textContent = 'Conectando...';
+    try {
+      const lista = await api('GET', '/prestadores');
+      const sel = document.getElementById('sel-prestador');
+      sel.innerHTML = '<option value="">Selecione...</option>';
+      lista.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nome;
+        sel.appendChild(opt);
+      });
+      document.getElementById('form').classList.remove('hidden');
+      document.getElementById('token-status').textContent = `✓ Conectado — ${lista.length} prestador(es) disponível(is)`;
+      document.getElementById('token-status').style.color = '#2e7d32';
+    } catch (e) {
+      document.getElementById('token-status').textContent = '✗ Falha: ' + e.message;
+      document.getElementById('token-status').style.color = '#c62828';
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Ao selecionar prestador
+  // ----------------------------------------------------------------
+  async function onPrestadorChange() {
+    const id = document.getElementById('sel-prestador').value;
+    const sections = ['sec-nf', 'sec-tomador', 'sec-actions'];
+
+    if (!id) {
+      sections.forEach(s => document.getElementById(s).classList.add('hidden'));
+      currentSchema = null;
+      return;
+    }
+
+    try {
+      const schema = await api('GET', `/prestadores/${id}`);
+      currentSchema = schema;
+
+      // Campos extras
+      const mostrarCnae = schema.campos_extras.includes('codigo_cnae');
+      document.getElementById('row-cnae').classList.toggle('hidden', !mostrarCnae);
+      document.getElementById('codigo_cnae').required = mostrarCnae;
+
+      // Limpar tomador e resultado ao trocar prestador
+      limparTomador();
+      document.getElementById('resultado').classList.add('hidden');
+
+      sections.forEach(s => document.getElementById(s).classList.remove('hidden'));
+
+      // Buscar proximo_rps de forma assíncrona
+      document.getElementById('rps-loading').classList.remove('hidden');
+      document.getElementById('numero_rps').value = '';
+      api('GET', `/prestadores/${id}/proximo-rps`)
+        .then(d => {
+          document.getElementById('numero_rps').value = d.proximo_rps;
+          document.getElementById('rps-loading').classList.add('hidden');
+        })
+        .catch(() => {
+          document.getElementById('rps-loading').classList.add('hidden');
+        });
+
+    } catch (e) {
+      alert('Erro ao carregar dados do prestador: ' + e.message);
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // ISS Retido
+  // ----------------------------------------------------------------
+  function onIssRetidoChange() {
+    const checked = document.getElementById('iss_retido').checked;
+    document.getElementById('row-valor-iss').classList.toggle('hidden', !checked);
+    if (!checked) document.getElementById('valor_iss').value = '';
+  }
+
+  // ----------------------------------------------------------------
+  // Submit
+  // ----------------------------------------------------------------
+  async function submitForm(e) {
+    e.preventDefault();
+
+    const prestador_id = document.getElementById('sel-prestador').value;
+    if (!prestador_id) return;
+
+    const btn = document.getElementById('btn-emitir');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Emitindo...';
+    document.getElementById('resultado').classList.add('hidden');
+
+    const iss_retido = document.getElementById('iss_retido').checked;
+
+    const body = {
+      prestador_id,
+      numero_rps: document.getElementById('numero_rps').value,
+      competencia: document.getElementById('competencia').value,
+      discriminacao: document.getElementById('discriminacao').value,
+      codigo_servico: document.getElementById('codigo_servico').value,
+      codigo_cnae: document.getElementById('codigo_cnae').value || '',
+      codigo_tributacao_municipio: document.getElementById('codigo_tributacao_municipio').value || '',
+      valor_servico: document.getElementById('valor_servico').value,
+      iss_retido,
+      valor_iss: iss_retido ? (document.getElementById('valor_iss').value || null) : null,
+      tomador_razao_social: document.getElementById('tomador_razao_social').value,
+      tomador_cnpj: document.getElementById('tomador_cnpj').value,
+      tomador_cpf: document.getElementById('tomador_cpf').value,
+      tomador_email: document.getElementById('tomador_email').value,
+      tomador_logradouro: document.getElementById('tomador_logradouro').value,
+      tomador_numero: document.getElementById('tomador_numero').value,
+      tomador_complemento: document.getElementById('tomador_complemento').value,
+      tomador_bairro: document.getElementById('tomador_bairro').value,
+      tomador_cep: document.getElementById('tomador_cep').value,
+      tomador_municipio_ibge: '',
+      tomador_uf: document.getElementById('tomador_uf').value,
+    };
+
+    try {
+      const r = await api('POST', '/nfse', body);
+
+      // Atualiza RPS para o próximo
+      const rpsUsado = parseInt(body.numero_rps, 10);
+      const rpsProximo = (r.rps_ajustado ? parseInt(r.rps_ajustado.para, 10) : rpsUsado) + 1;
+      document.getElementById('numero_rps').value = rpsProximo;
+
+      // Limpa dados do tomador e transação
+      limparTomador();
+      document.getElementById('valor_servico').value = '';
+      document.getElementById('discriminacao').value = '';
+      document.getElementById('iss_retido').checked = false;
+      document.getElementById('valor_iss').value = '';
+      document.getElementById('row-valor-iss').classList.add('hidden');
+
+      mostrarSucesso(r);
+    } catch (e) {
+      mostrarErro(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Emitir NFS-e';
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Exibição de resultado
+  // ----------------------------------------------------------------
+  function mostrarSucesso(r) {
+    const div = document.getElementById('resultado');
+    div.className = 'ok';
+    let html = `<h3>✓ NFS-e emitida com sucesso</h3>`;
+    html += `<div class="detail">`;
+    html += `NFS-e <strong>${r.numero_nfse}</strong>`;
+    if (r.codigo_verificacao) html += ` &nbsp;·&nbsp; Verificação: <strong>${r.codigo_verificacao}</strong>`;
+    html += `</div>`;
+    if (r.link_consulta) {
+      html += `<div style="margin-top:6px;"><a href="${r.link_consulta}" target="_blank" style="color:#1a5c2e;font-size:12px;">Ver na prefeitura ↗</a></div>`;
+    }
+    if (r.arquivo) {
+      html += `<div style="margin-top:4px;font-size:12px;color:#555;">XML salvo: ${r.arquivo}</div>`;
+    }
+    if (r.rps_ajustado) {
+      html += `<div class="aviso">⚠ RPS ajustado automaticamente de <strong>${r.rps_ajustado.de}</strong> para <strong>${r.rps_ajustado.para}</strong> (número anterior já utilizado).</div>`;
+    }
+    div.innerHTML = html;
+    div.classList.remove('hidden');
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function mostrarErro(msg) {
+    const div = document.getElementById('resultado');
+    div.className = 'erro';
+    div.innerHTML = `<h3>✗ Erro na emissão</h3><div class="detail">${escapeHtml(msg)}</div>`;
+    div.classList.remove('hidden');
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ----------------------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------------------
+  function limparTomador() {
+    ['tomador_cnpj','tomador_cpf','tomador_razao_social','tomador_email',
+     'tomador_logradouro','tomador_numero','tomador_complemento',
+     'tomador_bairro','tomador_cep','tomador_uf']
+      .forEach(id => { document.getElementById(id).value = ''; });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ----------------------------------------------------------------
+  // Inicialização automática se token já salvo
+  // ----------------------------------------------------------------
+  if (TOKEN) {
+    document.getElementById('token-input').value = TOKEN;
+    inicializar();
+  }
+</script>
+
+</body>
+</html>

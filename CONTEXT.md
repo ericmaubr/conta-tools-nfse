@@ -7,7 +7,7 @@
 ## Configuração (`conta_tools_nfse.conf`)
 
 ### `conf.py` — Leitura do arquivo .conf do prestador
-- `NfseConf(cert_path, inscricao_municipal, cert_senha, ambiente, optante_simples, serie_rps)`
+- `NfseConf(cert_path, inscricao_municipal, cert_senha, ambiente, optante_simples, serie_rps, nome, municipio, output_dir)`
 - `carregar_conf(caminho: Path) -> NfseConf`
 - Prioridade da senha: campo `senha` no conf > env `CONTA_TOOLS_CERT_PASSWORD`
 - Valida obrigatoriedade de `cert` e `inscricao_municipal`; valida valor de `ambiente`
@@ -20,7 +20,10 @@ cert                = C:\certs\empresa.pfx
 inscricao_municipal = 123456
 optante_simples     = S          ; S = Simples Nacional, N = Não Optante
 serie_rps           = 1          ; série do RPS (ex: 1, NFSE)
-senha               = ...        ; opcional se CONTA_TOOLS_CERT_PASSWORD estiver definida
+nome                = Empresa ABC ; label na UI da API (opcional)
+municipio           = campinas    ; qual driver usar na API (campinas | sao_paulo)
+output_dir          = Z:\saida    ; diretório de saída para XMLs (API)
+senha               = ...         ; opcional se CONTA_TOOLS_CERT_PASSWORD estiver definida
 
 [nfse]
 ambiente = producao              ; ou homologacao
@@ -36,6 +39,7 @@ ambiente = producao              ; ou homologacao
 - `python -m conta_tools_nfse campinas ultimo-rps ...`
 - `python -m conta_tools_nfse sao_paulo emitir ...`  (alias: `sp`)
 - `python -m conta_tools_nfse sao_paulo template ...`
+- `python -m conta_tools_nfse serve --conf api.conf` — inicia servidor FastAPI
 - `--version` / `--about` via `conta_tools_shared.version.handle_version_flags`
 
 ---
@@ -55,6 +59,32 @@ ambiente = producao              ; ou homologacao
 - `main_sao_paulo(argv)` — subcomandos `emitir` e `template`
 - `emitir`: lê planilha SP → chama `SaoPauloDriver` para cada linha → salva resultado
 - `template`: gera `template_nfse_sp.xlsx` via `criar_template_sp`
+
+---
+
+## API REST (`conta_tools_nfse.api`)
+
+### `api/conf.py` — Configuração do servidor
+- `ApiConf(host, port, bearer_token, prestadores_dir)`
+- `carregar_api_conf(caminho: Path) -> ApiConf`
+- Seções `[api]` e `[prestadores]` no arquivo `api.conf`
+
+### `api/app.py` — FastAPI
+- `create_app(api_conf: ApiConf) -> FastAPI` — factory chamada pelo `serve` command
+- `GET /` — serve `api/static/index.html` (UI sem autenticação)
+- `GET /prestadores` — lista prestadores do diretório (auth Bearer)
+- `GET /prestadores/{id}` — schema estático: municipio, serie_rps, campos_extras, campos_obrigatorios
+- `GET /prestadores/{id}/proximo-rps` — consulta SOAP (com cache de sessão) → próximo RPS
+- `POST /nfse` — emissão com auto-heal E10 e salvamento de XML em output_dir
+- Cache `_rps_cache: dict[str, int]` — proximo_rps por prestador, atualizado após emissão
+- E10 auto-heal: detecta "E10" no RuntimeError → limpa cache → recomputa → retenta
+- Resposta inclui `rps_ajustado: {de, para}` quando RPS foi corrigido
+
+### `api/static/index.html` — UI web
+- Token Bearer armazenado em `localStorage` (inserido manualmente pelo usuário)
+- Dropdown de prestadores carregado via `GET /prestadores`
+- `GET /prestadores/{id}/proximo-rps` chamado assincronamente ao selecionar prestador
+- Após sucesso: limpa tomador, valor, discriminação; incrementa RPS; mostra aviso de ajuste se houve
 
 ---
 

@@ -18,6 +18,9 @@ class NfseConf:
     ambiente: str = "producao"
     optante_simples: bool = False
     serie_rps: str = "1"
+    nome: str = ""            # nome de exibição na UI (API)
+    municipio: str = ""       # "campinas" | "sao_paulo"
+    output_dir: Path | None = None  # diretório de saída para XMLs emitidos
 
 
 def carregar_conf(caminho: Path) -> NfseConf:
@@ -67,6 +70,11 @@ def carregar_conf(caminho: Path) -> NfseConf:
     optante_simples = optante_raw in ("S", "SIM", "TRUE", "1")
 
     serie_rps = prestador.get("serie_rps", "1").strip() or "1"
+    nome = prestador.get("nome", "").strip()
+    municipio = prestador.get("municipio", "").strip().lower()
+
+    output_dir_raw = prestador.get("output_dir", "").strip()
+    output_dir = Path(output_dir_raw) if output_dir_raw else None
 
     nfse_sec = cfg["nfse"] if "nfse" in cfg else {}
     ambiente = nfse_sec.get("ambiente", "producao").strip()
@@ -80,4 +88,7 @@ def carregar_conf(caminho: Path) -> NfseConf:
         ambiente=ambiente,
         optante_simples=optante_simples,
         serie_rps=serie_rps,
+        nome=nome,
+        municipio=municipio,
+        output_dir=output_dir,
     )

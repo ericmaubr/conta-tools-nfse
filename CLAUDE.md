@@ -29,10 +29,14 @@ python -m conta_tools_nfse campinas template --saida template.xlsx
 # Emitir notas da planilha
 python -m conta_tools_nfse campinas emitir \
     --planilha notas.xlsx \
-    --cert /caminho/cert.pfx \
-    --inscricao-municipal 123456 \
-    [--ambiente homologacao|producao]   # default: producao
+    --conf empresa.conf \
     [--saida resultado.xlsx]
+
+# Consultar último RPS por série
+python -m conta_tools_nfse campinas ultimo-rps --conf empresa.conf
+
+# Iniciar servidor REST/web
+python -m conta_tools_nfse serve --conf api.conf
 ```
 
 ### Regras do CLI
@@ -81,7 +85,53 @@ src/conta_tools_nfse/
     reader.py      # lê a planilha e devolve lista de NfseRequest
   cli/
     campinas.py    # parser argparse + orquestração para Campinas
+    sao_paulo.py   # parser argparse + orquestração para SP
+  api/
+    conf.py        # parse de api.conf (host, port, bearer_token, prestadores_dir)
+    app.py         # FastAPI — GET /prestadores, GET /prestadores/{id}, POST /nfse
+    static/
+      index.html   # UI single-page HTML/JS (servida pelo FastAPI em GET /)
 ```
+
+## Servidor REST (`serve`)
+
+Inicia um servidor FastAPI para emissão via interface web ou ferramenta MCP.
+
+### api.conf
+
+```ini
+[api]
+host          = 127.0.0.1
+port          = 8080
+bearer_token  = meu-token-secreto
+
+[prestadores]
+dir = Z:\nfse\prestadores
+```
+
+### Campos extras no .conf do prestador (para uso com a API)
+
+```ini
+[prestador]
+nome       = Empresa ABC        ; label no dropdown da UI
+municipio  = campinas           ; qual driver usar
+output_dir = Z:\saida\empresa   ; onde salvar XML emitidos
+```
+
+### Endpoints
+
+| Método | Path | O que faz |
+|--------|------|-----------|
+| `GET` | `/` | UI web (HTML/JS) |
+| `GET` | `/prestadores` | Lista prestadores do diretório |
+| `GET` | `/prestadores/{id}` | Schema estático do município (campos, série) |
+| `GET` | `/prestadores/{id}/proximo-rps` | Consulta SOAP → próximo RPS (com cache) |
+| `POST` | `/nfse` | Emite NFS-e; auto-heal E10 com retry |
+
+- Auth: `Authorization: Bearer <token>` em todas as rotas exceto `GET /`
+- E10 auto-heal: detecta "E10" no RuntimeError → busca último RPS → incrementa → retenta
+- Output: `NF_{tomador}_{numero_nfse}_{competencia}.xml` em `output_dir` do prestador
+- Instalar: `pip install -e ".[api]"`
 
 ---
 
