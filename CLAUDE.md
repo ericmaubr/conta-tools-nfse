@@ -159,6 +159,54 @@ Contrato completo: `C:\dev\conta-tools-launcher\docs\VERSIONING.md`
 
 ---
 
+## Servidor MCP (`mcp-server`)
+
+Permite emissão via linguagem natural através do Claude Desktop / Claude Code.
+
+### mcp.conf (na máquina do cliente)
+
+```ini
+[api]
+url          = http://192.168.1.100:8080   ; endereço do servidor REST
+bearer_token = meu-token-secreto
+```
+
+### Ferramentas expostas
+
+| Ferramenta | O que faz |
+|-----------|-----------|
+| `listar_prestadores` | Lista empresas emissoras disponíveis (chame sempre primeiro) |
+| `montar_emissao` | Valida dados + busca próximo RPS → retorna resumo para conferência |
+| `confirmar_emissao` | Emite a NFS-e (só após confirmação textual do usuário) |
+
+### Guardrails embutidos nas descrições das ferramentas
+
+- `listar_prestadores` deve ser chamada antes de qualquer emissão; usuário escolhe o `id` explicitamente
+- `montar_emissao` exige CNPJ ou CPF do tomador; nunca infere por nome
+- `confirmar_emissao` só é chamada após o usuário confirmar o resumo de `montar_emissao`
+- `FastMCP.instructions` reforça as regras a nível de sistema para o agente
+
+### Registro no Claude Desktop / Claude Code
+
+```json
+{
+  "mcpServers": {
+    "conta-tools-nfse": {
+      "command": "python",
+      "args": ["-m", "conta_tools_nfse", "mcp-server", "--conf", "C:\\caminho\\mcp.conf"]
+    }
+  }
+}
+```
+
+### Instalar
+
+```bash
+pip install -e ".[mcp]"
+```
+
+---
+
 ## Convenções específicas deste repo
 
 - O XML de cada RPS é montado manualmente com `lxml.etree` — sem geração automática via WSDL

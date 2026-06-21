@@ -40,6 +40,7 @@ ambiente = producao              ; ou homologacao
 - `python -m conta_tools_nfse sao_paulo emitir ...`  (alias: `sp`)
 - `python -m conta_tools_nfse sao_paulo template ...`
 - `python -m conta_tools_nfse serve --conf api.conf` — inicia servidor FastAPI
+- `python -m conta_tools_nfse mcp-server --conf mcp.conf` — inicia servidor MCP stdio
 - `--version` / `--about` via `conta_tools_shared.version.handle_version_flags`
 
 ---
@@ -59,6 +60,36 @@ ambiente = producao              ; ou homologacao
 - `main_sao_paulo(argv)` — subcomandos `emitir` e `template`
 - `emitir`: lê planilha SP → chama `SaoPauloDriver` para cada linha → salva resultado
 - `template`: gera `template_nfse_sp.xlsx` via `criar_template_sp`
+
+---
+
+## Servidor MCP (`conta_tools_nfse.mcp`)
+
+### `mcp/conf.py`
+- `McpConf(api_url, bearer_token)`
+- `carregar_mcp_conf(caminho: Path) -> McpConf`
+- Seção `[api]` com `url` e `bearer_token`
+
+### `mcp/server.py`
+- `inicializar(api_url, bearer_token)` — configura estado do módulo; chamado antes de `run()`
+- `run()` — inicia o servidor MCP via stdio (protocolo MCP padrão)
+- `FastMCP.instructions` — guardrails de nível de sistema: nunca inferir prestador nem tomador
+
+**Ferramentas:**
+
+| Ferramenta | Descrição |
+|-----------|-----------|
+| `listar_prestadores()` | `GET /prestadores` → lista de `{id, nome}` |
+| `montar_emissao(prestador_id, tomador_cnpj, ...)` | Valida campos + `GET /prestadores/{id}/proximo-rps` → resumo JSON com `numero_rps` pré-preenchido. NÃO emite. |
+| `confirmar_emissao(prestador_id, numero_rps, ...)` | `POST /nfse` → emite; notifica `aviso_rps` se houve E10 auto-heal |
+
+**Guardrails nas descrições:**
+- `listar_prestadores`: "DEVE ser a primeira ferramenta chamada; nunca assuma qual empresa usar"
+- `montar_emissao`: "CNPJ/CPF obrigatório; razão social não identifica o tomador; não emite"
+- `confirmar_emissao`: "só chame após confirmação textual explícita do usuário"
+
+**Fluxo obrigatório:**
+`listar_prestadores` → coletar dados (com CNPJ/CPF) → `montar_emissao` → usuário confirma → `confirmar_emissao`
 
 ---
 
