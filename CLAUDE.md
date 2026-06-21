@@ -49,12 +49,16 @@ python -m conta_tools_nfse campinas emitir \
 ### Campinas — ABRASF 2.03
 | Ambiente | URL |
 |---|---|
-| Produção | `https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl` |
+| Produção | `https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl` |
 | Homologação | `https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl` |
 
-- Operação: `RecepcionarLoteRpsSincrono(nfseCabecMsg, nfseDadosMsg)`
+- Binding: `document/literal`, `elementFormDefault="unqualified"` (todos os elementos sem namespace)
+- Operação de emissão: `RecepcionarLoteRpsSincrono` — `EnviarLoteRpsSincronoEnvio` embutido como XML real no SOAP body
+- Operações de consulta: mesma estrutura; assinadas com `assinar_consulta()` (`Reference URI=""`)
 - Namespace XML: `http://www.abrasf.org.br/nfse.xsd`
 - Código IBGE Campinas: `3509502`
+- Quirks críticos: CNAE 9 dígitos, `optante_simples` deve bater com cadastro IMA, link de consulta construído programaticamente
+- Contrato completo: [`docs/DRIVERS.md`](docs/DRIVERS.md)
 
 ### São Paulo — Layout v2 (pendente implementação)
 | Ambiente | URL |
@@ -108,7 +112,8 @@ Contrato completo: `C:\dev\conta-tools-launcher\docs\VERSIONING.md`
 ## Convenções específicas deste repo
 
 - O XML de cada RPS é montado manualmente com `lxml.etree` — sem geração automática via WSDL
-- A assinatura digital é enveloped no elemento `InfDeclaracaoPrestacaoServico` (Id="rps1")
-- Cada driver tem um método `_montar_inf_rps(req)` que retorna bytes do XML não-assinado
+- Assinatura de emissão: `assinar_elemento()` (LoteRps, Signature como irmão)
+- Assinatura de consultas: `assinar_consulta()` com `Reference URI=""` (sem Id no elemento)
+- `optante_simples` e `serie_rps` ficam no `.conf`, não na planilha Excel
 - Testes de integração contra endpoints de homologação ficam em `tests/integration/` e são marcados com `@pytest.mark.integration`
 - Testes unitários não fazem chamadas HTTP — usam XML de exemplo fixo

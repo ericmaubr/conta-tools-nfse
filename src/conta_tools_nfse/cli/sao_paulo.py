@@ -100,6 +100,7 @@ def _cmd_emitir(args: argparse.Namespace) -> int:
             conf.inscricao_municipal,
             conf.cert_path,
             conf.cert_senha,
+            optante_simples=conf.optante_simples,
         )
     except Exception as e:
         log.log_erro(f"Erro ao ler planilha: {e}")

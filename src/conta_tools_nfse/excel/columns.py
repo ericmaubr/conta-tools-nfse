@@ -28,7 +28,6 @@ COLUNAS_OPCIONAIS_COMUNS = [
     "tomador_uf",
     "deducoes",
     "iss_retido",
-    "optante_simples",
 ]
 
 # Opcionais específicas do formato ABRASF (Campinas e outros municípios)
@@ -77,7 +76,6 @@ DESCRICOES: dict[str, str] = {
     "tomador_uf": "UF do Tomador",
     "deducoes": "Deduções (R$)",
     "iss_retido": "ISS Retido? (S/N)",
-    "optante_simples": "Optante Simples Nacional? (S/N)",
     "natureza_operacao": "Natureza Operação (1=Município, 2=Fora)",
     "codigo_cnae": "Código CNAE (7 ou 9 dígitos)",
     # SP-específico
@@ -106,7 +104,6 @@ EXEMPLO: dict[str, object] = {
     "tomador_uf": "SP",
     "deducoes": 0.00,
     "iss_retido": "N",
-    "optante_simples": "N",
     "natureza_operacao": 1,
     "codigo_cnae": "6920601",
     # SP-específico

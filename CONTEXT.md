@@ -7,20 +7,23 @@
 ## Configuração (`conta_tools_nfse.conf`)
 
 ### `conf.py` — Leitura do arquivo .conf do prestador
-- `NfseConf(cert_path, inscricao_municipal, cert_senha, ambiente)`
+- `NfseConf(cert_path, inscricao_municipal, cert_senha, ambiente, optante_simples, serie_rps)`
 - `carregar_conf(caminho: Path) -> NfseConf`
 - Prioridade da senha: campo `senha` no conf > env `CONTA_TOOLS_CERT_PASSWORD`
 - Valida obrigatoriedade de `cert` e `inscricao_municipal`; valida valor de `ambiente`
+- Suporta comentários inline com `;` (ex: `serie_rps = 1 ; comentário`)
 
 Formato do arquivo `.conf`:
 ```ini
 [prestador]
 cert                = C:\certs\empresa.pfx
 inscricao_municipal = 123456
-senha               = ...       ; opcional se CONTA_TOOLS_CERT_PASSWORD estiver definida
+optante_simples     = S          ; S = Simples Nacional, N = Não Optante
+serie_rps           = 1          ; série do RPS (ex: 1, NFSE)
+senha               = ...        ; opcional se CONTA_TOOLS_CERT_PASSWORD estiver definida
 
 [nfse]
-ambiente = producao             ; ou homologacao
+ambiente = producao              ; ou homologacao
 ```
 
 ---
@@ -30,6 +33,7 @@ ambiente = producao             ; ou homologacao
 ### `__main__.py` — Entry point
 - `python -m conta_tools_nfse campinas emitir ...`
 - `python -m conta_tools_nfse campinas template ...`
+- `python -m conta_tools_nfse campinas ultimo-rps ...`
 - `python -m conta_tools_nfse sao_paulo emitir ...`  (alias: `sp`)
 - `python -m conta_tools_nfse sao_paulo template ...`
 - `--version` / `--about` via `conta_tools_shared.version.handle_version_flags`
@@ -39,9 +43,11 @@ ambiente = producao             ; ou homologacao
 ## CLI Campinas (`conta_tools_nfse.cli.campinas`)
 
 ### `cli/campinas.py`
-- `main_campinas(argv)` — subcomandos `emitir` e `template`
-- `emitir`: lê planilha → chama `CampinasDriver` para cada linha → salva resultado
+- `main_campinas(argv)` — subcomandos `template`, `emitir` e `ultimo-rps`
 - `template`: gera `template_nfse_campinas.xlsx` via `criar_template_campinas`
+- `emitir`: lê planilha → chama `CampinasDriver` para cada linha → salva resultado
+- `ultimo-rps`: retroage mês a mês consultando `CampinasDriver.consultar_nfse_periodo`;
+  exibe `{série → último RPS, NFS-e, data}` para todas as séries do prestador
 
 ## CLI São Paulo (`conta_tools_nfse.cli.sao_paulo`)
 
@@ -54,6 +60,8 @@ ambiente = producao             ; ou homologacao
 
 ## Drivers (`conta_tools_nfse.drivers`)
 
+Contrato completo de implementação: [`docs/DRIVERS.md`](docs/DRIVERS.md)
+
 ### `drivers/base.py` — Classe base com helpers compartilhados
 - `NfseDriver(ABC)`: `emitir(req: NfseRequest) -> NfseResult`, `cancelar(...) -> None`
 - `NfseDriverBase(NfseDriver)`: `_chamar_soap`, `_resposta_para_xml`, `_levantar_se_erro`, `_sub`, `_cnpj_element`
@@ -61,13 +69,17 @@ ambiente = producao             ; ou homologacao
 ### `drivers/campinas.py` — Campinas ABRASF 2.03
 - `CampinasDriver(ambiente="producao")`
 - WSDL homologação: `https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl`
-- WSDL produção: `https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl`
-- Binding: `document/literal`, `elementFormDefault="unqualified"` — **todos os elementos sem namespace**.
-- Operação: `RecepcionarLoteRpsSincrono` — parâmetro é `EnviarLoteRpsSincronoEnvio` **embutido como XML real** no SOAP body (não como string em `nfseDadosMsg`).
-- Assinatura: `assinar_elemento()` (C14N 1.0, RSA-SHA1) no `LoteRps` (Id="lote1"); `Signature` fica como irmão dentro de `EnviarLoteRpsSincronoEnvio`.
-- mTLS obrigatório: certificado A1 PFX do prestador usado tanto no transporte quanto na assinatura.
-- **CNAE com 9 dígitos**: apesar do padrão ABRASF dizer N(7), Campinas exige 9 dígitos (`CodigoCnae`). O driver normaliza automaticamente: 7 dígitos → adiciona `00` (ex: `6920601` → `692060100`). O template XML oficial de Campinas confirma 9 chars no `<CodigoCnae>`.
-- Debug: `NFSE_DEBUG_SOAP=<dir>` grava request/response XML no diretório indicado.
+- WSDL produção: `https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl`
+- Binding: `document/literal`, `elementFormDefault="unqualified"` — **todos os elementos sem namespace**
+- Operação `RecepcionarLoteRpsSincrono`: `EnviarLoteRpsSincronoEnvio` embutido como XML real no SOAP body
+- Assinatura de emissão: `assinar_elemento()` no `LoteRps` (Id="lote1"); `Signature` fica como irmão
+- Assinatura de consultas: `assinar_consulta()` com `Reference URI=""` (padrão dos templates oficiais)
+- Link de consulta: construído programaticamente — Campinas não retorna `LinkConsultaNfse` na resposta
+- **CNAE com 9 dígitos**: driver normaliza automaticamente (7 dígitos → adiciona `"00"`)
+- **`OptanteSimplesNacional`**: lido de `conf.optante_simples`; deve bater com cadastro IMA
+- **`serie_rps`**: lido de `conf.serie_rps` (default `"1"`); sistema legado usava `"NFSE"`
+- `consultar_nfse_periodo(prestador, data_ini, data_fim)` → `dict[str, tuple[str,str,str]]`
+- Debug: `NFSE_DEBUG_SOAP=<dir>` grava request/response XML no diretório indicado
 
 ### `drivers/sao_paulo.py` — São Paulo formato SP
 - `SaoPauloDriver(ambiente="producao")`
@@ -75,8 +87,9 @@ ambiente = producao             ; ou homologacao
 - Operação: `EnviarLoteRpsSincrono(VstrXMLlote)`
 - Namespace root: `http://www.prefeitura.sp.gov.br/nfe`; filhos sem namespace (xmlns="")
 - Assinatura: `assinar_rps_sp()` (RSA-SHA1 Base64 de string concatenada) em `<Assinatura>`
-- `serie_rps` sempre "RPS"; `codigo_servico` 5 dígitos
-- `cancelar_com_verificacao(numero_nota, prestador, codigo_verificacao, motivo)` — cancelamento SP exige código de verificação
+- `serie_rps` sempre `"RPS"` (fixo); `codigo_servico` 5 dígitos
+- `cancelar_com_verificacao(numero_nota, prestador, codigo_verificacao, motivo)`
+- `consultar_nfse_periodo` **não implementado** — `ultimo-rps` não disponível para SP
 
 ---
 
@@ -89,6 +102,7 @@ ambiente = producao             ; ou homologacao
 - `COLUNAS_SP_OPCIONAIS = ["tributacao_rps"]`
 - `TODAS_COLUNAS_SP` — SP completo
 - `DESCRICOES`, `EXEMPLO`, `EXEMPLO_SP` — para templates
+- `optante_simples` **não está nas colunas** — vem do `.conf`
 
 ### `excel/template.py` — Gerador de template
 - `criar_template_campinas(caminho: Path) -> None` — gera template para Campinas
@@ -96,8 +110,10 @@ ambiente = producao             ; ou homologacao
 - `_preencher_aba(ws, colunas, exemplo, larguras_extra)` — helper compartilhado
 
 ### `excel/reader.py` — Leitura da planilha
-- `ler_planilha_campinas(path, prestador_cnpj, inscricao_municipal, cert_path, cert_senha)`
-- `ler_planilha_sp(path, prestador_cnpj, inscricao_municipal, cert_path, cert_senha)`
+- `ler_planilha_campinas(path, prestador_cnpj, inscricao_municipal, cert_path, cert_senha, optante_simples=False, serie_rps="1")`
+- `ler_planilha_sp(path, prestador_cnpj, inscricao_municipal, cert_path, cert_senha, optante_simples=False)`
 - Ambas retornam `(list[NfseRequest], list[str])` — pedidos + erros por linha
-- `salvar_resultado(caminho_original, caminho_saida, resultados)` — acrescenta colunas de resultado
+- `salvar_resultado(caminho_original, caminho_saida, resultados)`:
+  - Acrescenta colunas `status`, `numero_nfse`, `codigo_verificacao`, `link_consulta`, `erro`
+  - Detecta colunas de resultado de run anterior (pelo header `"status"`) e sobrescreve em vez de duplicar
 - `_mapear_colunas(ws, colunas_busca)` — helper de mapeamento de cabeçalhos

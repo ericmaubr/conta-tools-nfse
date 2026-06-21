@@ -40,14 +40,14 @@ _TODAS_COLUNAS_CAMPINAS = [
     "data_emissao", "tomador_inscricao_municipal", "tomador_email",
     "tomador_logradouro", "tomador_numero", "tomador_complemento",
     "tomador_bairro", "tomador_cep", "tomador_municipio_ibge", "tomador_uf",
-    "deducoes", "iss_retido", "optante_simples", "natureza_operacao", "codigo_cnae",
+    "deducoes", "iss_retido", "natureza_operacao", "codigo_cnae",
 ]
 
 _TODAS_COLUNAS_SP_OPCIONAIS = [
     "data_emissao", "tomador_inscricao_municipal", "tomador_email",
     "tomador_logradouro", "tomador_numero", "tomador_complemento",
     "tomador_bairro", "tomador_cep", "tomador_municipio_ibge", "tomador_uf",
-    "deducoes", "iss_retido", "optante_simples", "tributacao_rps",
+    "deducoes", "iss_retido", "tributacao_rps",
 ]
 
 
@@ -86,6 +86,8 @@ def ler_planilha_campinas(
     inscricao_municipal: str,
     cert_path: Path,
     cert_senha: str,
+    optante_simples: bool = False,
+    serie_rps: str = "1",
 ) -> tuple[list[NfseRequest], list[str]]:
     """
     Lê a planilha e retorna (pedidos_válidos, lista_de_erros).
@@ -188,7 +190,6 @@ def ler_planilha_campinas(
         )
 
         iss_retido_raw = cel("iss_retido").upper()
-        optante_raw = cel("optante_simples").upper()
         nat_op_raw = cel("natureza_operacao")
 
         req = NfseRequest(
@@ -201,10 +202,11 @@ def ler_planilha_campinas(
             municipio_prestacao="campinas",
             competencia=competencia_iso,
             numero_rps=cel("numero_rps"),
+            serie_rps=serie_rps,
             data_emissao=data_emissao,
             deducoes=deducoes,
             iss_retido=iss_retido_raw == "S",
-            optante_simples=optante_raw == "S",
+            optante_simples=optante_simples,
             natureza_operacao=int(nat_op_raw) if nat_op_raw.isdigit() else 1,
             codigo_cnae=cel("codigo_cnae"),
         )
@@ -224,6 +226,7 @@ def ler_planilha_sp(
     inscricao_municipal: str,
     cert_path: Path,
     cert_senha: str,
+    optante_simples: bool = False,
 ) -> tuple[list[NfseRequest], list[str]]:
     """
     Lê a planilha SP e retorna (pedidos_válidos, lista_de_erros).
@@ -328,7 +331,6 @@ def ler_planilha_sp(
 
         trib_raw = cel("tributacao_rps").upper() or "T"
         iss_retido_raw = cel("iss_retido").upper()
-        optante_raw = cel("optante_simples").upper()
 
         req = NfseRequest(
             id=str(uuid4()),
@@ -344,7 +346,7 @@ def ler_planilha_sp(
             data_emissao=data_emissao,
             deducoes=deducoes,
             iss_retido=iss_retido_raw == "S",
-            optante_simples=optante_raw == "S",
+            optante_simples=optante_simples,
             tributacao_rps=trib_raw,
             aliquota_servicos=aliquota,
         )
@@ -399,8 +401,14 @@ def salvar_resultado(
     wb = load_workbook(caminho_original)
     ws = wb.active
 
-    # Encontrar próxima coluna vazia após os dados
+    # Se o arquivo já tiver colunas de resultado (run anterior), sobrescreve em vez de duplicar.
+    # Detecta pela presença de um header "status" (primeiro marcador das colunas de resultado).
     next_col = ws.max_column + 1
+    for c in range(1, ws.max_column + 1):
+        if _limpar_header(str(ws.cell(1, c).value or "")) == "status":
+            next_col = c
+            break
+
     headers = ["status", "numero_nfse", "codigo_verificacao", "link_consulta", "erro"]
     cores = {"EMITIDA": "C6EFCE", "ERRO": "FFC7CE"}
 

@@ -16,6 +16,8 @@ class NfseConf:
     inscricao_municipal: str
     cert_senha: str           # nunca logar
     ambiente: str = "producao"
+    optante_simples: bool = False
+    serie_rps: str = "1"
 
 
 def carregar_conf(caminho: Path) -> NfseConf:
@@ -36,7 +38,7 @@ def carregar_conf(caminho: Path) -> NfseConf:
     if not caminho.exists():
         raise FileNotFoundError(f"Arquivo de configuração não encontrado: {caminho}")
 
-    cfg = configparser.ConfigParser()
+    cfg = configparser.ConfigParser(inline_comment_prefixes=(";",))
     cfg.read(caminho, encoding="utf-8")
 
     if "prestador" not in cfg:
@@ -61,6 +63,11 @@ def carregar_conf(caminho: Path) -> NfseConf:
             f"Defina 'senha' em [{caminho.name}] ou a variável CONTA_TOOLS_CERT_PASSWORD."
         )
 
+    optante_raw = prestador.get("optante_simples", "N").strip().upper()
+    optante_simples = optante_raw in ("S", "SIM", "TRUE", "1")
+
+    serie_rps = prestador.get("serie_rps", "1").strip() or "1"
+
     nfse_sec = cfg["nfse"] if "nfse" in cfg else {}
     ambiente = nfse_sec.get("ambiente", "producao").strip()
     if ambiente not in ("producao", "homologacao"):
@@ -71,4 +78,6 @@ def carregar_conf(caminho: Path) -> NfseConf:
         inscricao_municipal=inscricao,
         cert_senha=senha,
         ambiente=ambiente,
+        optante_simples=optante_simples,
+        serie_rps=serie_rps,
     )

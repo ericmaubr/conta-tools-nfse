@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import calendar
+from datetime import date
 from pathlib import Path
 
 from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
+from conta_tools_shared.domain.nfse import PrestadorNfse
 from conta_tools_shared.logging import formatter as log
 from conta_tools_shared.version import handle_version_flags
 
@@ -36,9 +39,41 @@ def main_campinas(argv: list[str] | None = None) -> int:
         help="Caminho de saída (default: template_nfse_campinas.xlsx)",
     )
 
+    # --- ultimo-rps ---
+    urps = sub.add_parser(
+        "ultimo-rps",
+        help="Consulta o último RPS emitido por série",
+        description=(
+            "Consulta o webservice de Campinas e retorna o último número de RPS "
+            "emitido para cada série (ex: '1', 'NFSE'). Útil para saber qual número "
+            "usar na próxima emissão. Pesquisa mês a mês a partir do mês atual, "
+            "retroagindo até encontrar NFS-e."
+        ),
+    )
+    urps.add_argument(
+        "--conf",
+        required=True,
+        type=Path,
+        metavar="CONF",
+        help="Arquivo .conf do prestador (cert, inscrição municipal, senha, ambiente)",
+    )
+    urps.add_argument(
+        "--meses",
+        type=int,
+        default=24,
+        metavar="N",
+        help="Máximo de meses para retroagir (default: 24)",
+    )
+
     # --- emitir ---
     emit = sub.add_parser("emitir", help="Emite as notas a partir de uma planilha")
-    emit.add_argument("--planilha", required=True, type=Path, metavar="XLSX")
+    emit.add_argument(
+        "--planilha",
+        required=True,
+        type=Path,
+        metavar="XLSX",
+        help="Planilha Excel com os dados das notas (use 'template' para gerar o modelo)",
+    )
     emit.add_argument(
         "--conf",
         required=True,
@@ -57,6 +92,8 @@ def main_campinas(argv: list[str] | None = None) -> int:
 
     if args.cmd == "template":
         return _cmd_template(args)
+    if args.cmd == "ultimo-rps":
+        return _cmd_ultimo_rps(args)
     if args.cmd == "emitir":
         return _cmd_emitir(args)
 
@@ -67,6 +104,71 @@ def main_campinas(argv: list[str] | None = None) -> int:
 def _cmd_template(args: argparse.Namespace) -> int:
     criar_template_campinas(args.saida)
     log.log_ok(f"Template gerado: {args.saida}")
+    return 0
+
+
+def _cmd_ultimo_rps(args: argparse.Namespace) -> int:
+    try:
+        conf = carregar_conf(args.conf)
+    except Exception as e:
+        log.log_erro(f"Erro ao ler configuração: {e}")
+        return 1
+
+    try:
+        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
+    except Exception as e:
+        log.log_erro(f"Erro ao carregar certificado: {e}")
+        return 1
+
+    prestador_cnpj = cnpj_from_certificate(cert_data)
+    if not prestador_cnpj:
+        log.log_erro("Não foi possível extrair o CNPJ do certificado.")
+        return 1
+
+    prestador = PrestadorNfse(
+        cnpj=prestador_cnpj,
+        inscricao_municipal=conf.inscricao_municipal,
+        cert_path=conf.cert_path,
+        cert_senha=conf.cert_senha,
+    )
+
+    driver = CampinasDriver(ambiente=conf.ambiente)
+
+    hoje = date.today()
+    ano, mes = hoje.year, hoje.month
+    resultado: dict[str, tuple[str, str, str]] = {}
+
+    for _ in range(args.meses):
+        ultimo_dia = calendar.monthrange(ano, mes)[1]
+        data_ini = f"{ano}-{mes:02d}-01"
+        data_fim = f"{ano}-{mes:02d}-{ultimo_dia:02d}"
+        log.log_info(f"Consultando {mes:02d}/{ano}...")
+
+        try:
+            resultado = driver.consultar_nfse_periodo(prestador, data_ini, data_fim)
+        except Exception as e:
+            log.log_erro(f"Erro na consulta: {e}")
+            return 1
+
+        if resultado:
+            break
+
+        mes -= 1
+        if mes == 0:
+            mes = 12
+            ano -= 1
+
+    if not resultado:
+        log.log_aviso(f"Nenhuma NFS-e encontrada nos últimos {args.meses} meses.")
+        return 0
+
+    for serie in sorted(resultado.keys()):
+        ultimo_rps, numero_nfse, data_emissao = resultado[serie]
+        log.log_ok(
+            f"Série {serie!r:10} → último RPS: {ultimo_rps:>8}"
+            f"  (NFS-e {numero_nfse} · {data_emissao})"
+        )
+
     return 0
 
 
@@ -103,6 +205,8 @@ def _cmd_emitir(args: argparse.Namespace) -> int:
             conf.inscricao_municipal,
             conf.cert_path,
             conf.cert_senha,
+            optante_simples=conf.optante_simples,
+            serie_rps=conf.serie_rps,
         )
     except Exception as e:
         log.log_erro(f"Erro ao ler planilha: {e}")

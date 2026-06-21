@@ -10,7 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from lxml import etree
 
 from conta_tools_shared.domain.nfse import NfseRequest, NfseResult, PrestadorNfse
-from conta_tools_shared.nfse.signer import assinar_elemento, assinar_xml
+from conta_tools_shared.nfse.signer import assinar_consulta, assinar_elemento, assinar_xml
 from conta_tools_shared.nfse.transport import soap_transport
 
 from conta_tools_nfse.drivers.base import NfseDriverBase
@@ -21,7 +21,7 @@ _NS_TNS = "http://nfse.abrasf.org.br"
 _IBGE_CAMPINAS = "3509502"
 
 _WSDL = {
-    "producao":    "https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl",
+    "producao":    "https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl",
     "homologacao": "https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl",
 }
 
@@ -73,7 +73,7 @@ class CampinasDriver(NfseDriverBase):
         # Embute EnviarLoteRpsSincronoEnvio diretamente no SOAP body (não como texto)
         soap_bytes = self._montar_soap_sincrono(envio_el)
         resp_str = self._enviar_soap_sincrono(soap_bytes, req.prestador.cert_path, req.prestador.cert_senha)
-        return self._parsear_resposta(resp_str, req.numero_rps, req.competencia)
+        return self._parsear_resposta(resp_str, req)
 
     def cancelar(
         self,
@@ -98,8 +98,100 @@ class CampinasDriver(NfseDriverBase):
         self._levantar_se_erro(resp_xml, _NS)
 
     # ------------------------------------------------------------------ #
+    # Consultas                                                            #
+    # ------------------------------------------------------------------ #
+
+    def consultar_nfse_periodo(
+        self,
+        prestador: PrestadorNfse,
+        data_ini: str,
+        data_fim: str,
+    ) -> dict[str, tuple[str, str, str]]:
+        """
+        Retorna {serie: (ultimo_rps, numero_nfse, data_emissao)} para o período.
+
+        Varre todas as páginas de ConsultarNfseServicoPrestado e guarda o maior
+        número de RPS por série. Retorna dict vazio se não houver NFS-e no período.
+        """
+        por_serie: dict[str, tuple[int, str, str, str]] = {}
+        pagina = 1
+
+        while True:
+            envio = etree.Element("ConsultarNfseServicoPrestadoEnvio")
+            p_el = etree.SubElement(envio, "Prestador")
+            cc = etree.SubElement(p_el, "CpfCnpj")
+            etree.SubElement(cc, "Cnpj").text = prestador.cnpj
+            etree.SubElement(p_el, "InscricaoMunicipal").text = prestador.inscricao_municipal
+            periodo = etree.SubElement(envio, "PeriodoEmissao")
+            etree.SubElement(periodo, "DataInicial").text = data_ini
+            etree.SubElement(periodo, "DataFinal").text = data_fim
+            etree.SubElement(envio, "Pagina").text = str(pagina)
+
+            assinar_consulta(envio, prestador.cert_path, prestador.cert_senha)
+
+            soap_bytes = self._montar_soap_op(envio, "ConsultarNfseServicoPrestado")
+            resp_str = self._enviar_soap_sincrono(soap_bytes, prestador.cert_path, prestador.cert_senha)
+            resp_xml = self._resposta_para_xml(resp_str)
+
+            self._levantar_se_erro(resp_xml, _NS)
+            self._levantar_se_erro(resp_xml, "")
+
+            notas = resp_xml.findall(".//InfNfse")
+            if not notas:
+                break
+
+            for nota in notas:
+                def _f(tag: str) -> str:
+                    return nota.findtext(f"{{{_NS}}}{tag}") or nota.findtext(tag) or ""
+
+                num_nfse = _f("Numero")
+                data_emissao = _f("DataEmissao")[:10]
+
+                rps_el = (
+                    nota.find(f".//{{{_NS}}}IdentificacaoRps")
+                    or nota.find(".//IdentificacaoRps")
+                )
+                if rps_el is None:
+                    continue
+
+                def _r(tag: str) -> str:
+                    return rps_el.findtext(f"{{{_NS}}}{tag}") or rps_el.findtext(tag) or ""
+
+                serie = _r("Serie")
+                num_rps = _r("Numero")
+                if not serie or not num_rps:
+                    continue
+
+                try:
+                    num_rps_int = int(num_rps)
+                except ValueError:
+                    num_rps_int = 0
+
+                if serie not in por_serie or num_rps_int > por_serie[serie][0]:
+                    por_serie[serie] = (num_rps_int, num_rps, num_nfse, data_emissao)
+
+            if len(notas) < 50:
+                break
+            pagina += 1
+
+        return {
+            serie: (rps, nfse, data)
+            for serie, (_, rps, nfse, data) in por_serie.items()
+        }
+
+    # ------------------------------------------------------------------ #
     # SOAP direto (Campinas: document/literal, sem nfseDadosMsg)          #
     # ------------------------------------------------------------------ #
+
+    def _montar_soap_op(self, envio_el: etree._Element, operacao: str) -> bytes:
+        """Monta SOAP 1.1 document/literal genérico (consultas e outros ops)."""
+        nsmap = {"soapenv": _NS_SOAP, "tns": _NS_TNS}
+        env = etree.Element(f"{{{_NS_SOAP}}}Envelope", nsmap=nsmap)
+        etree.SubElement(env, f"{{{_NS_SOAP}}}Header")
+        body = etree.SubElement(env, f"{{{_NS_SOAP}}}Body")
+        op = etree.SubElement(body, f"{{{_NS_TNS}}}{operacao}")
+        op.append(envio_el)
+        return etree.tostring(env, xml_declaration=True, encoding="UTF-8")
 
     def _montar_soap_sincrono(self, envio_el: etree._Element) -> bytes:
         """
@@ -306,7 +398,7 @@ class CampinasDriver(NfseDriverBase):
     # Parser de resposta                                                   #
     # ------------------------------------------------------------------ #
 
-    def _parsear_resposta(self, resp_str: str, numero_rps: str, competencia: str) -> NfseResult:
+    def _parsear_resposta(self, resp_str: str, req: NfseRequest) -> NfseResult:
         resp_xml = self._resposta_para_xml(resp_str)
 
         # Verifica erros: tenta com namespace ABRASF e sem namespace
@@ -324,11 +416,29 @@ class CampinasDriver(NfseDriverBase):
         if not numero:
             raise RuntimeError("Resposta do webservice não contém número da NFS-e.")
 
+        cod_verif = _find("CodigoVerificacao")
+
         return NfseResult(
             numero_nota=numero,
-            codigo_verificacao=_find("CodigoVerificacao"),
-            competencia=competencia,
+            codigo_verificacao=cod_verif,
+            competencia=req.competencia,
             xml_retorno=resp_str.encode(),
-            link_consulta=_find("LinkConsultaNfse"),
-            numero_rps_origem=str(numero_rps),
+            link_consulta=self._link_consulta(req, numero, cod_verif),
+            numero_rps_origem=str(req.numero_rps),
+        )
+
+    def _link_consulta(self, req: NfseRequest, numero: str, codigo_verificacao: str) -> str:
+        """Constrói a URL de consulta/impressão da NFS-e no portal de Campinas.
+
+        Campinas não retorna LinkConsultaNfse na resposta SOAP; o link é construído
+        com base no padrão REST do portal (mesmo padrão usado pela lib nfse-campinas).
+        """
+        parts = urlsplit(self.wsdl)
+        base = parts.scheme + "://" + parts.netloc + parts.path.rsplit("/", 1)[0]
+        cnpj = req.prestador.cnpj
+        im = req.prestador.inscricao_municipal
+        return (
+            f"{base}/notafiscal-ws/servico/notafiscal/autenticacao/"
+            f"cpfCnpj/{cnpj}/inscricaoMunicipal/{im}/"
+            f"numeroNota/{numero}/codigoVerificacao/{codigo_verificacao}"
         )
