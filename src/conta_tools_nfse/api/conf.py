@@ -13,6 +13,7 @@ class ApiConf:
     port: int
     bearer_token: str
     prestadores_dir: Path
+    cnpj_api_url: str = ""   # URL do conta-tools-cnpj, ex: http://127.0.0.1:8765
 
 
 def carregar_api_conf(caminho: Path) -> ApiConf:
@@ -54,9 +55,12 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
     if not prestadores_dir.exists():
         raise FileNotFoundError(f"Diretório de prestadores não encontrado: {prestadores_dir}")
 
+    cnpj_api_url = api_sec.get("cnpj_api_url", "").strip().rstrip("/")
+
     return ApiConf(
         host=host,
         port=port,
         bearer_token=bearer_token,
         prestadores_dir=prestadores_dir,
+        cnpj_api_url=cnpj_api_url,
     )

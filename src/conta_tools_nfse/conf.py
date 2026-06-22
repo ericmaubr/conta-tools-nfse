@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,13 +15,15 @@ from conta_tools_shared.auth.certificate import cert_password_from_env
 class NfseConf:
     cert_path: Path
     inscricao_municipal: str
-    cert_senha: str           # nunca logar
+    cert_senha: str                # nunca logar
     ambiente: str = "producao"
     optante_simples: bool = False
     serie_rps: str = "1"
-    nome: str = ""            # nome de exibição na UI (API)
-    municipio: str = ""       # "campinas" | "sao_paulo"
-    output_dir: Path | None = None  # diretório de saída para XMLs emitidos
+    nome: str = ""                 # nome de exibição na UI (API)
+    municipio: str = ""            # "campinas" | "sao_paulo"
+    output_dir: Path | None = None # diretório de saída para XMLs emitidos
+    cnpj_prestador: str = ""       # CNPJ explícito para procuração eletrônica;
+                                   # se vazio, usa o CNPJ extraído do certificado
 
 
 def carregar_conf(caminho: Path) -> NfseConf:
@@ -76,6 +79,8 @@ def carregar_conf(caminho: Path) -> NfseConf:
     output_dir_raw = prestador.get("output_dir", "").strip()
     output_dir = Path(output_dir_raw) if output_dir_raw else None
 
+    cnpj_prestador = re.sub(r"\D", "", prestador.get("cnpj_prestador", "").strip())
+
     nfse_sec = cfg["nfse"] if "nfse" in cfg else {}
     ambiente = nfse_sec.get("ambiente", "producao").strip()
     if ambiente not in ("producao", "homologacao"):
@@ -91,4 +96,5 @@ def carregar_conf(caminho: Path) -> NfseConf:
         nome=nome,
         municipio=municipio,
         output_dir=output_dir,
+        cnpj_prestador=cnpj_prestador,
     )

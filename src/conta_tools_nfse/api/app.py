@@ -23,7 +23,8 @@ from conta_tools_nfse.conf import NfseConf, carregar_conf
 # ------------------------------------------------------------------ #
 
 _api_conf: ApiConf | None = None
-_rps_cache: dict[str, int] = {}  # prestador_id → proximo_rps
+_rps_cache: dict[str, int] = {}          # prestador_id → proximo_rps
+_cnae_cache: dict[str, list[dict]] = {}  # prestador_id → [{codigo, descricao}]
 
 # ------------------------------------------------------------------ #
 # Helpers de autenticação                                             #
@@ -58,6 +59,7 @@ class PrestadorSchema(BaseModel):
     serie_rps: str
     campos_extras: list[str]
     campos_obrigatorios: list[str]
+    cnaes: list[dict] = []  # [{codigo, descricao}] do prestador
 
 
 class EmissaoRequest(BaseModel):
@@ -114,6 +116,59 @@ _CAMPOS_OBRIGATORIOS: dict[str, list[str]] = {
 # ------------------------------------------------------------------ #
 
 
+def _cnpj_prestador(conf: NfseConf) -> str:
+    """CNPJ do prestador: campo explícito (procuração) ou extraído do certificado."""
+    if conf.cnpj_prestador:
+        return conf.cnpj_prestador  # já normalizado em carregar_conf
+    from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
+    return cnpj_from_certificate(load_pfx_data(conf.cert_path, conf.cert_senha))
+
+
+def _normalizar_cnae(codigo: str) -> str:
+    digits = re.sub(r"\D", "", str(codigo))
+    return digits + "00" if len(digits) == 7 else digits
+
+
+def _get_prestador_cnaes(prestador_id: str, conf: NfseConf) -> list[dict]:
+    """Busca CNAEs do prestador via conta-tools-cnpj (cache de sessão).
+
+    Retorna lista com CNAE principal primeiro, seguido dos secundários,
+    todos normalizados para 9 dígitos.
+    """
+    if prestador_id in _cnae_cache:
+        return _cnae_cache[prestador_id]
+
+    assert _api_conf is not None
+    if not _api_conf.cnpj_api_url:
+        _cnae_cache[prestador_id] = []
+        return []
+
+    try:
+        import requests as _req
+
+        cnpj = _cnpj_prestador(conf)
+        r = _req.get(f"{_api_conf.cnpj_api_url}/cnpj/{cnpj}", timeout=5)
+        cnaes: list[dict] = []
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("cnae_fiscal"):
+                cnaes.append({
+                    "codigo": _normalizar_cnae(d["cnae_fiscal"]),
+                    "descricao": d.get("cnae_descricao", ""),
+                })
+            for sec in d.get("cnaes_secundarios") or []:
+                if sec.get("codigo"):
+                    cnaes.append({
+                        "codigo": _normalizar_cnae(sec["codigo"]),
+                        "descricao": sec.get("descricao", ""),
+                    })
+        _cnae_cache[prestador_id] = cnaes
+        return cnaes
+    except Exception:
+        _cnae_cache[prestador_id] = []
+        return []
+
+
 def _caminho_conf(prestador_id: str) -> Path:
     assert _api_conf is not None
     return _api_conf.prestadores_dir / f"{prestador_id}.conf"
@@ -138,12 +193,10 @@ def _get_proximo_rps(prestador_id: str, conf: NfseConf) -> int:
     if prestador_id in _rps_cache:
         return _rps_cache[prestador_id]
 
-    from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
     from conta_tools_shared.domain.nfse import PrestadorNfse
 
     try:
-        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
-        cnpj = cnpj_from_certificate(cert_data)
+        cnpj = _cnpj_prestador(conf)
         prestador = PrestadorNfse(
             cnpj=cnpj,
             inscricao_municipal=conf.inscricao_municipal,
@@ -226,6 +279,42 @@ def index():
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/cnpj/{cnpj}")
+def consultar_cnpj(cnpj: str, _token: str = Depends(_verificar_token)):
+    import requests as _req
+
+    assert _api_conf is not None
+    if not _api_conf.cnpj_api_url:
+        raise HTTPException(status_code=503, detail="Consulta de CNPJ nao configurada (cnpj_api_url ausente no api.conf).")
+
+    cnpj_digits = re.sub(r"\D", "", cnpj)
+    if len(cnpj_digits) != 14:
+        raise HTTPException(status_code=422, detail="CNPJ deve ter 14 digitos.")
+
+    try:
+        r = _req.get(f"{_api_conf.cnpj_api_url}/cnpj/{cnpj_digits}", timeout=10)
+        if r.status_code == 404:
+            raise HTTPException(status_code=404, detail="CNPJ nao encontrado na base.")
+        r.raise_for_status()
+        d = r.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao consultar conta-tools-cnpj: {e}")
+
+    return {
+        "razao_social":    d.get("razao_social", ""),
+        "email":           d.get("email", ""),
+        "logradouro":      d.get("logradouro", ""),
+        "numero":          d.get("numero", ""),
+        "complemento":     d.get("complemento", ""),
+        "bairro":          d.get("bairro", ""),
+        "cep":             re.sub(r"\D", "", d.get("cep", "")),
+        "municipio_ibge":  str(d.get("municipio_ibge", "")),
+        "uf":              d.get("uf", ""),
+    }
+
+
 @app.get("/prestadores", response_model=list[PrestadorItem])
 def list_prestadores(_token: str = Depends(_verificar_token)):
     assert _api_conf is not None
@@ -248,6 +337,7 @@ def get_prestador_schema(
 ):
     conf = _carregar_prestador(prestador_id)
     municipio = conf.municipio or "campinas"
+    cnaes = _get_prestador_cnaes(prestador_id, conf)
     return PrestadorSchema(
         id=prestador_id,
         nome=_nome_prestador(prestador_id, conf),
@@ -255,6 +345,7 @@ def get_prestador_schema(
         serie_rps=conf.serie_rps,
         campos_extras=_CAMPOS_EXTRAS.get(municipio, []),
         campos_obrigatorios=_CAMPOS_OBRIGATORIOS.get(municipio, []),
+        cnaes=cnaes,
     )
 
 
@@ -272,7 +363,6 @@ def emitir_nfse(
     req: EmissaoRequest,
     _token: str = Depends(_verificar_token),
 ):
-    from conta_tools_shared.auth.certificate import cnpj_from_certificate, load_pfx_data
     from conta_tools_shared.domain.nfse import NfseRequest, PrestadorNfse, TomadorNfse
 
     conf = _carregar_prestador(req.prestador_id)
@@ -283,10 +373,9 @@ def emitir_nfse(
         raise HTTPException(status_code=422, detail="Razão social do tomador é obrigatória.")
 
     try:
-        cert_data = load_pfx_data(conf.cert_path, conf.cert_senha)
-        cnpj = cnpj_from_certificate(cert_data)
+        cnpj = _cnpj_prestador(conf)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao carregar certificado: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao obter CNPJ do prestador: {e}")
 
     prestador = PrestadorNfse(
         cnpj=cnpj,
