@@ -26,10 +26,20 @@
       padding: 11px 20px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 16px;
     }
-    header h1 { font-size: 15px; font-weight: 600; }
-    header span { font-size: 11px; opacity: .6; }
+    header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    nav { display: flex; gap: 4px; }
+    nav a {
+      color: rgba(255,255,255,.65);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      transition: background .15s, color .15s;
+    }
+    nav a:hover { background: rgba(255,255,255,.1); color: #fff; }
+    nav a.active { background: rgba(255,255,255,.18); color: #fff; font-weight: 600; }
 
     /* ── Layout: sidebar + main ── */
     .layout {
@@ -226,13 +236,29 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .hidden { display: none !important; }
+
+    /* Retenções federais */
+    .ret-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 5px 10px;
+    }
+    .ret-cell { display: flex; flex-direction: column; gap: 2px; }
+    .ret-nome { font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .3px; }
+    .ret-aliq-row { display: flex; align-items: center; gap: 3px; }
+    .ret-aliq-row > span { font-size: 11px; color: #888; }
+    input.ret-aliq-inp { width: 50px; padding: 3px 5px; font-size: 11px; color: #666; }
+    input.ret-val-inp  { padding: 5px 7px; font-size: 12px; }
   </style>
 </head>
 <body>
 
 <header>
   <h1>ContaTools</h1>
-  <span>Emissão de NFS-e</span>
+  <nav>
+    <a href="/" class="active">NFS-e</a>
+    <a href="/pessoas-fisicas-ui">Pessoas Físicas</a>
+  </nav>
 </header>
 
 <div class="layout">
@@ -281,10 +307,16 @@
 
       <!-- TOMADOR -->
       <div class="section">
-        <h2>Tomador</h2>
+        <h2 style="display:flex;align-items:center;justify-content:space-between;">
+          Tomador
+          <button type="button" onclick="limparTomador()"
+                  style="font-size:10px;font-weight:500;color:#888;background:none;border:none;
+                         cursor:pointer;padding:0;letter-spacing:.3px;text-transform:none;"
+                  title="Limpar dados do tomador">Limpar</button>
+        </h2>
 
         <!-- Linha 1: CNPJ | CPF | Razão social | E-mail -->
-        <div class="grid" style="grid-template-columns:2fr 1.2fr 2.5fr 2fr;margin-bottom:6px;">
+        <div class="grid" style="grid-template-columns:1.7fr 1.5fr 3fr 1.8fr;margin-bottom:6px;">
           <label>
             <span>CNPJ</span>
             <div style="display:flex;gap:5px;">
@@ -297,8 +329,14 @@
           </label>
           <label>
             <span>CPF</span>
-            <input type="text" id="tomador_cpf" name="tomador_cpf"
-                   placeholder="000.000.000-00" maxlength="14">
+            <div style="display:flex;gap:5px;">
+              <input type="text" id="tomador_cpf" name="tomador_cpf"
+                     placeholder="000.000.000-00" maxlength="14" style="flex:1;"
+                     oninput="onCpfInput()">
+              <button type="button" id="btn-buscar-cpf" class="cnpj-btn"
+                      onclick="buscarCpf()" title="Buscar pelo CPF">🔍</button>
+            </div>
+            <div class="cnpj-status" id="cpf-status"></div>
           </label>
           <label>
             <span class="req">Razão social / Nome</span>
@@ -349,7 +387,7 @@
       <div class="section">
         <h2>Dados da Nota</h2>
 
-        <div class="grid g3" style="margin-bottom:6px;">
+        <div class="grid" style="grid-template-columns:1fr 1fr 1fr 1.8fr 1fr;margin-bottom:6px;">
           <label>
             <span class="req">Competência</span>
             <input type="month" id="competencia" name="competencia" required>
@@ -364,9 +402,6 @@
             <input type="text" id="codigo_servico" name="codigo_servico"
                    placeholder="ex: 1.07" required>
           </label>
-        </div>
-
-        <div class="grid g2" style="margin-bottom:6px;">
           <label id="row-cnae" class="hidden">
             <span class="req">CNAE</span>
             <select id="cnae-select" onchange="onCnaeSelectChange()" style="display:none;"></select>
@@ -398,6 +433,66 @@
             <span>Valor retenção ISS (R$)</span>
             <input type="number" id="valor_iss" name="valor_iss" min="0" step="0.01">
           </label>
+        </div>
+      </div>
+
+      <!-- RETENÇÕES FEDERAIS -->
+      <div class="section hidden" id="sec-retencoes">
+        <h2>Retenções Federais</h2>
+        <div class="ret-grid">
+          <div class="ret-cell">
+            <span class="ret-nome">PIS/PASEP</span>
+            <div class="ret-aliq-row">
+              <input type="number" class="ret-aliq-inp" id="aliq_pis" value="0.65" step="0.01" min="0" max="100"
+                     oninput="calcRetencao('pis')">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_pis" name="valor_pis" step="0.01" min="0" value="0">
+          </div>
+          <div class="ret-cell">
+            <span class="ret-nome">COFINS</span>
+            <div class="ret-aliq-row">
+              <input type="number" class="ret-aliq-inp" id="aliq_cofins" value="3.00" step="0.01" min="0" max="100"
+                     oninput="calcRetencao('cofins')">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_cofins" name="valor_cofins" step="0.01" min="0" value="0">
+          </div>
+          <div class="ret-cell">
+            <span class="ret-nome">INSS</span>
+            <div class="ret-aliq-row">
+              <input type="number" class="ret-aliq-inp" id="aliq_inss" value="0.00" step="0.01" min="0" max="100"
+                     oninput="calcRetencao('inss')">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_inss" name="valor_inss" step="0.01" min="0" value="0">
+          </div>
+          <div class="ret-cell">
+            <span class="ret-nome">IRRF</span>
+            <div class="ret-aliq-row">
+              <input type="number" class="ret-aliq-inp" id="aliq_ir" value="1.50" step="0.01" min="0" max="100"
+                     oninput="calcRetencao('ir')">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_ir" name="valor_ir" step="0.01" min="0" value="0">
+          </div>
+          <div class="ret-cell">
+            <span class="ret-nome">CSLL</span>
+            <div class="ret-aliq-row">
+              <input type="number" class="ret-aliq-inp" id="aliq_csll" value="1.00" step="0.01" min="0" max="100"
+                     oninput="calcRetencao('csll')">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_csll" name="valor_csll" step="0.01" min="0" value="0">
+          </div>
+          <div class="ret-cell">
+            <span class="ret-nome">Outras</span>
+            <div class="ret-aliq-row" style="visibility:hidden;">
+              <input type="number" class="ret-aliq-inp" tabindex="-1" value="0">
+              <span>%</span>
+            </div>
+            <input type="number" class="ret-val-inp" id="valor_outras_retencoes" name="valor_outras_retencoes" step="0.01" min="0" value="0">
+          </div>
         </div>
       </div>
 
@@ -498,6 +593,9 @@
       currentSchema = schema;
 
       _popularCnae(schema);
+      _popularAliquotas(schema);
+      if (schema.codigo_servico)
+        document.getElementById('codigo_servico').value = schema.codigo_servico;
       limparTomador();
       document.getElementById('resultado').classList.add('hidden');
 
@@ -573,6 +671,16 @@
     }
   }
 
+  // ── Alíquotas por prestador ──────────────────────────────────────
+  function _popularAliquotas(schema) {
+    const a = schema.aliq_retencoes || {};
+    [['pis','aliq_pis'],['cofins','aliq_cofins'],['inss','aliq_inss'],
+     ['ir','aliq_ir'],['csll','aliq_csll']].forEach(([n, key]) => {
+      const el = document.getElementById('aliq_' + n);
+      if (el && a[key] !== undefined) el.value = a[key];
+    });
+  }
+
   // ── ISS Retido ───────────────────────────────────────────────────
   function onIssRetidoChange() {
     const checked = document.getElementById('iss_retido').checked;
@@ -589,6 +697,11 @@
 
     const numero_rps = document.getElementById('numero_rps').value;
     if (!numero_rps) { alert('Número do RPS não carregado ainda.'); return; }
+
+    const _cnpjT = document.getElementById('tomador_cnpj').value.replace(/\D/g, '');
+    const _cpfT  = document.getElementById('tomador_cpf').value.replace(/\D/g, '');
+    if (_cnpjT && !validarCnpj(_cnpjT)) { alert('CNPJ do tomador inválido.'); return; }
+    if (_cpfT  && !validarCpf(_cpfT))   { alert('CPF do tomador inválido.');  return; }
 
     const btn = document.getElementById('btn-emitir');
     btn.disabled = true;
@@ -619,6 +732,12 @@
       tomador_cep:            document.getElementById('tomador_cep').value,
       tomador_municipio_ibge: document.getElementById('tomador_municipio_ibge').value,
       tomador_uf:             document.getElementById('tomador_uf').value,
+      valor_pis:              document.getElementById('valor_pis').value || '0',
+      valor_cofins:           document.getElementById('valor_cofins').value || '0',
+      valor_inss:             document.getElementById('valor_inss').value || '0',
+      valor_ir:               document.getElementById('valor_ir').value || '0',
+      valor_csll:             document.getElementById('valor_csll').value || '0',
+      valor_outras_retencoes: document.getElementById('valor_outras_retencoes').value || '0',
     };
 
     try {
@@ -665,6 +784,32 @@
     div.classList.remove('hidden');
   }
 
+  // ── Validação CPF / CNPJ ─────────────────────────────────────────
+  function validarCpf(d) {
+    d = d.replace(/\D/g, '');
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    let s = 0;
+    for (let i = 0; i < 9; i++) s += +d[i] * (10 - i);
+    let r = (s * 10) % 11; if (r >= 10) r = 0;
+    if (r !== +d[9]) return false;
+    s = 0;
+    for (let i = 0; i < 10; i++) s += +d[i] * (11 - i);
+    r = (s * 10) % 11; if (r >= 10) r = 0;
+    return r === +d[10];
+  }
+
+  function validarCnpj(d) {
+    d = d.replace(/\D/g, '');
+    if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+    const w = (ns, ws) => {
+      const s = ns.reduce((a, n, i) => a + n * ws[i], 0) % 11;
+      return s < 2 ? 0 : 11 - s;
+    };
+    const n = d.split('').map(Number);
+    return w(n.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2]) === n[12] &&
+           w(n.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2]) === n[13];
+  }
+
   // ── Busca CNPJ ───────────────────────────────────────────────────
   async function buscarCnpj() {
     const cnpj   = document.getElementById('tomador_cnpj').value.replace(/\D/g, '');
@@ -674,6 +819,11 @@
     if (cnpj.length !== 14) {
       status.style.color = '#c62828';
       status.textContent = 'CNPJ deve ter 14 dígitos.';
+      return;
+    }
+    if (!validarCnpj(cnpj)) {
+      status.style.color = '#c62828';
+      status.textContent = 'CNPJ inválido.';
       return;
     }
     btn.disabled = true; btn.textContent = '⏳';
@@ -693,9 +843,62 @@
       status.style.color = '#2e7d32';
       status.textContent = '✓ Dados preenchidos';
       setTimeout(() => { status.textContent = ''; }, 4000);
+      atualizarRetencoes(d.optante_simples === 'S' ? 'simples' : 'nao_simples');
     } catch (e) {
       status.style.color = '#c62828';
       status.textContent = '✗ ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍';
+    }
+  }
+
+  // ── Busca CPF ─────────────────────────────────────────────────────
+  function onCpfInput() {
+    const cpf = document.getElementById('tomador_cpf').value.replace(/\D/g, '');
+    document.getElementById('cpf-status').textContent = '';
+    if (cpf.length === 11) buscarCpf();
+  }
+
+  async function buscarCpf() {
+    const cpf    = document.getElementById('tomador_cpf').value.replace(/\D/g, '');
+    const status = document.getElementById('cpf-status');
+    const btn    = document.getElementById('btn-buscar-cpf');
+
+    if (cpf.length !== 11) {
+      status.style.color = '#c62828';
+      status.textContent = 'CPF deve ter 11 dígitos.';
+      return;
+    }
+    if (!validarCpf(cpf)) {
+      status.style.color = '#c62828';
+      status.textContent = 'CPF inválido.';
+      return;
+    }
+    btn.disabled = true; btn.textContent = '⏳';
+    status.style.color = '#888'; status.textContent = 'Consultando...';
+
+    try {
+      const d = await api('GET', '/pessoas-fisicas/' + cpf);
+      document.getElementById('tomador_razao_social').value   = d.nome           || '';
+      document.getElementById('tomador_email').value          = d.email          || '';
+      document.getElementById('tomador_logradouro').value     = d.logradouro     || '';
+      document.getElementById('tomador_numero').value         = d.numero         || '';
+      document.getElementById('tomador_complemento').value    = d.complemento    || '';
+      document.getElementById('tomador_bairro').value         = d.bairro         || '';
+      document.getElementById('tomador_cep').value            = d.cep            || '';
+      document.getElementById('tomador_uf').value             = d.uf             || '';
+      document.getElementById('tomador_municipio_ibge').value = d.municipio_ibge || '';
+      status.style.color = '#2e7d32';
+      status.textContent = '✓ Dados preenchidos do cadastro';
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    } catch (e) {
+      if (e.message && e.message.includes('não encontrado')) {
+        status.style.color = '#b45000';
+        status.innerHTML = '⚠ CPF não cadastrado — <a href="/pessoas-fisicas-ui?cpf=' + cpf + '&modo=novo" target="_blank" style="color:#b45000;">Cadastrar</a>';
+      } else {
+        status.style.color = '#888';
+        status.textContent = '';  // sem cadastro configurado — ignora silenciosamente
+      }
     } finally {
       btn.disabled = false; btn.textContent = '🔍';
     }
@@ -708,11 +911,61 @@
      'tomador_bairro','tomador_cep','tomador_uf','tomador_municipio_ibge']
       .forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('cnpj-status').textContent = '';
+    document.getElementById('cpf-status').textContent = '';
+    atualizarRetencoes('reset');
   }
 
   function esc(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+
+  // ── Retenções federais ──────────────────────────────────────────
+  function atualizarRetencoes(tipo) {
+    const sec = document.getElementById('sec-retencoes');
+    if (tipo === 'nao_simples') {
+      sec.classList.remove('hidden');
+      recalcularRetencoes();
+    } else {
+      sec.classList.add('hidden');
+      zerarRetencoes();
+    }
+  }
+
+  function zerarRetencoes() {
+    ['pis','cofins','inss','ir','csll','outras_retencoes'].forEach(n => {
+      const el = document.getElementById('valor_' + n);
+      if (el) el.value = '0';
+    });
+  }
+
+  function recalcularRetencoes() {
+    const vs = parseFloat(document.getElementById('valor_servico').value) || 0;
+    [['pis','aliq_pis'],['cofins','aliq_cofins'],['inss','aliq_inss'],
+     ['ir','aliq_ir'],['csll','aliq_csll']].forEach(([n, aid]) => {
+      const aliq = parseFloat(document.getElementById(aid).value) || 0;
+      document.getElementById('valor_' + n).value = (aliq / 100 * vs).toFixed(2);
+    });
+  }
+
+  function calcRetencao(nome) {
+    const vs = parseFloat(document.getElementById('valor_servico').value) || 0;
+    const aliq = parseFloat(document.getElementById('aliq_' + nome).value) || 0;
+    document.getElementById('valor_' + nome).value = (aliq / 100 * vs).toFixed(2);
+  }
+
+  // Recalcula retenções quando valor do serviço muda
+  document.getElementById('valor_servico').addEventListener('input', function () {
+    if (!document.getElementById('sec-retencoes').classList.contains('hidden')) {
+      recalcularRetencoes();
+    }
+  });
+
+  // CPF sem CNPJ → sem retenções federais
+  document.getElementById('tomador_cpf').addEventListener('input', function () {
+    const cpf  = this.value.replace(/\D/g, '');
+    const cnpj = document.getElementById('tomador_cnpj').value.replace(/\D/g, '');
+    if (cpf && !cnpj) atualizarRetencoes('cpf');
+  });
 
   // ── Auto-login ───────────────────────────────────────────────────
   if (TOKEN) {

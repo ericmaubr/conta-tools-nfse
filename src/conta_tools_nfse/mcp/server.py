@@ -1,12 +1,16 @@
 """Servidor MCP para emissão de NFS-e via linguagem natural.
 
 Ferramentas expostas:
-  listar_prestadores   — descobre as empresas emissoras disponíveis
-  montar_emissao       — valida os dados e monta resumo para conferência
-  confirmar_emissao    — emite a NFS-e após confirmação explícita do usuário
+  listar_prestadores      — descobre as empresas emissoras disponíveis
+  buscar_pessoa_fisica    — consulta CPF no cadastro local (SQLite)
+  cadastrar_pessoa_fisica — salva/atualiza pessoa física no cadastro local
+  montar_emissao          — valida os dados e monta resumo para conferência
+  confirmar_emissao       — emite a NFS-e após confirmação explícita do usuário
 
 Fluxo obrigatório:
-  listar_prestadores → coletar dados → montar_emissao → usuário confirma → confirmar_emissao
+  listar_prestadores → coletar dados
+    → se tomador for PF: buscar_pessoa_fisica → (se não encontrado) cadastrar_pessoa_fisica
+    → montar_emissao → usuário confirma → confirmar_emissao
 """
 
 from __future__ import annotations
@@ -32,9 +36,12 @@ mcp = FastMCP(
         "1. Sempre chame listar_prestadores primeiro e apresente a lista ao usuário. "
         "Nunca assuma qual empresa emissora usar sem seleção explícita.\n"
         "2. Nunca infira o tomador por nome. Exija CNPJ ou CPF antes de prosseguir.\n"
-        "3. Sempre chame montar_emissao e apresente o resumo completo ao usuário. "
+        "3. Quando o tomador for pessoa física (CPF), sempre chame buscar_pessoa_fisica "
+        "antes de montar_emissao. Se retornar encontrado=false, colete os dados com o "
+        "usuário e chame cadastrar_pessoa_fisica antes de prosseguir.\n"
+        "4. Sempre chame montar_emissao e apresente o resumo completo ao usuário. "
         "Só chame confirmar_emissao após confirmação textual explícita do usuário.\n"
-        "4. Nunca altere valores monetários, RPS ou dados do tomador sem nova confirmação."
+        "5. Nunca altere valores monetários, RPS ou dados do tomador sem nova confirmação."
     ),
 )
 
@@ -44,11 +51,19 @@ mcp = FastMCP(
 # ------------------------------------------------------------------ #
 
 
-def _api(method: str, path: str, body: dict | None = None) -> dict | list:
+def _api(
+    method: str,
+    path: str,
+    body: dict | None = None,
+    *,
+    allow_404: bool = False,
+) -> dict | list | None:
     url = f"{_api_url}{path}"
     headers = {"Authorization": f"Bearer {_bearer_token}"}
     try:
         r = requests.request(method, url, json=body, headers=headers, timeout=30)
+        if allow_404 and r.status_code == 404:
+            return None
         r.raise_for_status()
         return r.json()
     except requests.HTTPError as e:
@@ -95,7 +110,96 @@ def listar_prestadores() -> str:
 
 
 # ------------------------------------------------------------------ #
-# Ferramenta 2 — montar_emissao                                       #
+# Ferramenta 2 — buscar_pessoa_fisica                                 #
+# ------------------------------------------------------------------ #
+
+
+@mcp.tool()
+def buscar_pessoa_fisica(cpf: str) -> str:
+    """Consulta o cadastro de pessoas físicas pelo CPF (via API REST).
+
+    DEVE ser chamada sempre que o tomador for pessoa física, antes de
+    montar_emissao. Use os dados retornados para preencher os campos
+    tomador_* em montar_emissao.
+
+    Retorna JSON com encontrado=true e todos os dados cadastrados,
+    ou encontrado=false se o CPF não estiver no cadastro — nesse caso,
+    colete os dados com o usuário e chame cadastrar_pessoa_fisica.
+    """
+    cpf_digits = "".join(c for c in cpf if c.isdigit())
+    try:
+        data = _api("GET", f"/pessoas-fisicas/{cpf_digits}", allow_404=True)
+    except RuntimeError as e:
+        return f"ERRO ao consultar cadastro: {e}"
+
+    if data is None:
+        return _json({"encontrado": False, "cpf": cpf_digits})
+
+    return _json({"encontrado": True, **data})
+
+
+# ------------------------------------------------------------------ #
+# Ferramenta 3 — cadastrar_pessoa_fisica                              #
+# ------------------------------------------------------------------ #
+
+
+@mcp.tool()
+def cadastrar_pessoa_fisica(
+    cpf: str,
+    nome: str,
+    logradouro: str = "",
+    numero: str = "",
+    complemento: str = "",
+    bairro: str = "",
+    cep: str = "",
+    municipio: str = "",
+    municipio_ibge: str = "",
+    uf: str = "",
+    email: str = "",
+    celular: str = "",
+    fixo: str = "",
+) -> str:
+    """Cadastra ou atualiza uma pessoa física no cadastro (via API REST).
+
+    Use após buscar_pessoa_fisica retornar encontrado=false.
+    Colete todos os dados obrigatórios com o usuário antes de chamar.
+    Os campos de contato (email, celular, fixo) são opcionais — passe
+    vazio se o usuário não informar.
+
+    cep, municipio_ibge, celular e fixo são normalizados automaticamente
+    pelo servidor (somente dígitos).
+
+    Retorna confirmação com status e dados salvos.
+    """
+    if not nome.strip():
+        return "ERRO: nome é obrigatório."
+
+    body = {
+        "cpf": cpf,
+        "nome": nome,
+        "logradouro": logradouro,
+        "numero": numero,
+        "complemento": complemento,
+        "bairro": bairro,
+        "cep": cep,
+        "municipio": municipio,
+        "municipio_ibge": municipio_ibge,
+        "uf": uf,
+        "email": email,
+        "celular": celular,
+        "fixo": fixo,
+    }
+
+    try:
+        result = _api("POST", "/pessoas-fisicas", body)
+    except RuntimeError as e:
+        return f"ERRO ao salvar no cadastro: {e}"
+
+    return _json({"status": "salvo", "cpf": result["cpf"], "nome": result["nome"]})
+
+
+# ------------------------------------------------------------------ #
+# Ferramenta 4 — montar_emissao                                       #
 # ------------------------------------------------------------------ #
 
 
@@ -216,7 +320,7 @@ def montar_emissao(
 
 
 # ------------------------------------------------------------------ #
-# Ferramenta 3 — confirmar_emissao                                    #
+# Ferramenta 5 — confirmar_emissao                                    #
 # ------------------------------------------------------------------ #
 
 

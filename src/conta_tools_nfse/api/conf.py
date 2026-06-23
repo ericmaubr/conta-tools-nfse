@@ -13,7 +13,14 @@ class ApiConf:
     port: int
     bearer_token: str
     prestadores_dir: Path
-    cnpj_api_url: str = ""   # URL do conta-tools-cnpj, ex: http://127.0.0.1:8765
+    cnpj_api_url: str = ""              # URL do conta-tools-cnpj, ex: http://127.0.0.1:8765
+    db_pessoas_fisicas: Path | None = None  # SQLite de pessoas físicas
+    # Alíquotas-padrão de retenção (podem ser sobrescritas por prestador)
+    aliq_pis: float = 0.65
+    aliq_cofins: float = 3.00
+    aliq_inss: float = 0.00
+    aliq_ir: float = 1.50
+    aliq_csll: float = 1.00
 
 
 def carregar_api_conf(caminho: Path) -> ApiConf:
@@ -29,6 +36,9 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
 
         [prestadores]
         dir = Z:\\nfse\\prestadores
+
+        [pessoas_fisicas]
+        db_path = Z:\\nfse\\pessoas_fisicas.db
     """
     if not caminho.exists():
         raise FileNotFoundError(f"api.conf não encontrado: {caminho}")
@@ -57,10 +67,31 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
 
     cnpj_api_url = api_sec.get("cnpj_api_url", "").strip().rstrip("/")
 
+    pf_sec = cfg["pessoas_fisicas"] if "pessoas_fisicas" in cfg else {}
+    db_pf_raw = pf_sec.get("db_path", "").strip()
+    db_pessoas_fisicas = Path(db_pf_raw) if db_pf_raw else None
+
+    ret_sec = cfg["retencoes"] if "retencoes" in cfg else {}
+
+    def _aliq(key: str, default: float) -> float:
+        raw = ret_sec.get(key, "").strip()
+        if not raw:
+            return default
+        try:
+            return float(raw.replace(",", "."))
+        except ValueError:
+            return default
+
     return ApiConf(
         host=host,
         port=port,
         bearer_token=bearer_token,
         prestadores_dir=prestadores_dir,
         cnpj_api_url=cnpj_api_url,
+        db_pessoas_fisicas=db_pessoas_fisicas,
+        aliq_pis=_aliq("aliq_pis", 0.65),
+        aliq_cofins=_aliq("aliq_cofins", 3.00),
+        aliq_inss=_aliq("aliq_inss", 0.00),
+        aliq_ir=_aliq("aliq_ir", 1.50),
+        aliq_csll=_aliq("aliq_csll", 1.00),
     )

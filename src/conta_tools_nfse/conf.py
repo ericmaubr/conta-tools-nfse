@@ -22,8 +22,15 @@ class NfseConf:
     nome: str = ""                 # nome de exibição na UI (API)
     municipio: str = ""            # "campinas" | "sao_paulo"
     output_dir: Path | None = None # diretório de saída para XMLs emitidos
+    codigo_servico: str = ""        # código LC 116 padrão (ex: "4.01"), pré-preenche a UI
     cnpj_prestador: str = ""       # CNPJ explícito para procuração eletrônica;
                                    # se vazio, usa o CNPJ extraído do certificado
+    # Alíquotas de retenção (None = usar default do api.conf)
+    aliq_pis: float | None = None
+    aliq_cofins: float | None = None
+    aliq_inss: float | None = None
+    aliq_ir: float | None = None
+    aliq_csll: float | None = None
 
 
 def carregar_conf(caminho: Path) -> NfseConf:
@@ -79,12 +86,24 @@ def carregar_conf(caminho: Path) -> NfseConf:
     output_dir_raw = prestador.get("output_dir", "").strip()
     output_dir = Path(output_dir_raw) if output_dir_raw else None
 
+    codigo_servico = prestador.get("codigo_servico", "").strip()
     cnpj_prestador = re.sub(r"\D", "", prestador.get("cnpj_prestador", "").strip())
 
     nfse_sec = cfg["nfse"] if "nfse" in cfg else {}
     ambiente = nfse_sec.get("ambiente", "producao").strip()
     if ambiente not in ("producao", "homologacao"):
         raise ValueError(f"Campo 'ambiente' inválido: {ambiente!r}. Use 'producao' ou 'homologacao'.")
+
+    ret_sec = cfg["retencoes"] if "retencoes" in cfg else {}
+
+    def _aliq_opt(key: str) -> float | None:
+        raw = ret_sec.get(key, "").strip()
+        if not raw:
+            return None
+        try:
+            return float(raw.replace(",", "."))
+        except ValueError:
+            return None
 
     return NfseConf(
         cert_path=cert_path,
@@ -96,5 +115,11 @@ def carregar_conf(caminho: Path) -> NfseConf:
         nome=nome,
         municipio=municipio,
         output_dir=output_dir,
+        codigo_servico=codigo_servico,
         cnpj_prestador=cnpj_prestador,
+        aliq_pis=_aliq_opt("aliq_pis"),
+        aliq_cofins=_aliq_opt("aliq_cofins"),
+        aliq_inss=_aliq_opt("aliq_inss"),
+        aliq_ir=_aliq_opt("aliq_ir"),
+        aliq_csll=_aliq_opt("aliq_csll"),
     )

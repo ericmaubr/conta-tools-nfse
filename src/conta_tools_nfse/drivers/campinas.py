@@ -291,8 +291,20 @@ class CampinasDriver(NfseDriverBase):
         sub(valores, ns, "ValorServicos").text = f"{req.valor_servico:.2f}"
         if req.deducoes:
             sub(valores, ns, "ValorDeducoes").text = f"{req.deducoes:.2f}"
+        if req.valor_pis:
+            sub(valores, ns, "ValorPis").text = f"{req.valor_pis:.2f}"
+        if req.valor_cofins:
+            sub(valores, ns, "ValorCofins").text = f"{req.valor_cofins:.2f}"
+        if req.valor_inss:
+            sub(valores, ns, "ValorInss").text = f"{req.valor_inss:.2f}"
+        if req.valor_ir:
+            sub(valores, ns, "ValorIr").text = f"{req.valor_ir:.2f}"
+        if req.valor_csll:
+            sub(valores, ns, "ValorCsll").text = f"{req.valor_csll:.2f}"
         if req.valor_iss is not None:
             sub(valores, ns, "ValorIss").text = f"{req.valor_iss:.2f}"
+        if req.valor_outras_retencoes:
+            sub(valores, ns, "OutrasRetencoes").text = f"{req.valor_outras_retencoes:.2f}"
         sub(servico, ns, "IssRetido").text = "1" if req.iss_retido else "2"
         if req.codigo_servico:
             sub(servico, ns, "ItemListaServico").text = req.codigo_servico
@@ -434,7 +446,7 @@ class CampinasDriver(NfseDriverBase):
         com base no padrão REST do portal (mesmo padrão usado pela lib nfse-campinas).
         """
         parts = urlsplit(self.wsdl)
-        base = parts.scheme + "://" + parts.netloc + parts.path.rsplit("/", 1)[0]
+        base = parts.scheme + "://" + parts.netloc
         cnpj = req.prestador.cnpj
         im = req.prestador.inscricao_municipal
         return (

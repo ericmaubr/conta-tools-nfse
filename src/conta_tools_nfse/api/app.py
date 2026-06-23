@@ -26,6 +26,12 @@ _api_conf: ApiConf | None = None
 _rps_cache: dict[str, int] = {}          # prestador_id → proximo_rps
 _cnae_cache: dict[str, list[dict]] = {}  # prestador_id → [{codigo, descricao}]
 
+try:
+    from conta_tools_nfse.api.pessoas_fisicas import PessoasFisicasDb
+    _db_pf: PessoasFisicasDb | None = None
+except ImportError:
+    _db_pf = None  # type: ignore[assignment]
+
 # ------------------------------------------------------------------ #
 # Helpers de autenticação                                             #
 # ------------------------------------------------------------------ #
@@ -59,7 +65,9 @@ class PrestadorSchema(BaseModel):
     serie_rps: str
     campos_extras: list[str]
     campos_obrigatorios: list[str]
-    cnaes: list[dict] = []  # [{codigo, descricao}] do prestador
+    cnaes: list[dict] = []           # [{codigo, descricao}] do prestador
+    aliq_retencoes: dict = {}        # {aliq_pis, aliq_cofins, aliq_inss, aliq_ir, aliq_csll}
+    codigo_servico: str = ""         # código LC 116 padrão do prestador
 
 
 class EmissaoRequest(BaseModel):
@@ -73,6 +81,12 @@ class EmissaoRequest(BaseModel):
     valor_servico: str        # string — evita perda de precisão float
     iss_retido: bool = False
     valor_iss: str | None = None
+    valor_pis: str = "0"
+    valor_cofins: str = "0"
+    valor_inss: str = "0"
+    valor_ir: str = "0"
+    valor_csll: str = "0"
+    valor_outras_retencoes: str = "0"
     tomador_razao_social: str
     tomador_cnpj: str = ""
     tomador_cpf: str = ""
@@ -94,6 +108,22 @@ class EmissaoResponse(BaseModel):
     rps_ajustado: dict[str, Any] | None = None
     arquivo: str = ""
     mensagem: str = ""
+
+
+class PessoaFisicaSchema(BaseModel):
+    cpf: str
+    nome: str
+    logradouro: str = ""
+    numero: str = ""
+    complemento: str = ""
+    bairro: str = ""
+    cep: str = ""
+    municipio: str = ""
+    municipio_ibge: str = ""
+    uf: str = ""
+    email: str = ""
+    celular: str = ""
+    fixo: str = ""
 
 
 # ------------------------------------------------------------------ #
@@ -266,6 +296,28 @@ def _decimal(valor: str | None, campo: str) -> Decimal:
         raise HTTPException(status_code=422, detail=f"Valor inválido para {campo}: {valor!r}")
 
 
+def _aliquotas_efetivas(conf: NfseConf) -> dict:
+    assert _api_conf is not None
+    def _ef(prestador_val: float | None, api_val: float) -> float:
+        return prestador_val if prestador_val is not None else api_val
+    return {
+        "aliq_pis":    _ef(conf.aliq_pis,    _api_conf.aliq_pis),
+        "aliq_cofins": _ef(conf.aliq_cofins, _api_conf.aliq_cofins),
+        "aliq_inss":   _ef(conf.aliq_inss,   _api_conf.aliq_inss),
+        "aliq_ir":     _ef(conf.aliq_ir,     _api_conf.aliq_ir),
+        "aliq_csll":   _ef(conf.aliq_csll,   _api_conf.aliq_csll),
+    }
+
+
+def _decimal_zero(valor: str | None) -> Decimal:
+    if not valor:
+        return Decimal("0")
+    try:
+        return Decimal(valor.replace(",", "."))
+    except InvalidOperation:
+        return Decimal("0")
+
+
 # ------------------------------------------------------------------ #
 # Rotas                                                               #
 # ------------------------------------------------------------------ #
@@ -276,6 +328,12 @@ app = FastAPI(title="ContaTools NFS-e API", version="1.0")
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def index():
     html_path = Path(__file__).parent / "static" / "index.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/pessoas-fisicas-ui", response_class=HTMLResponse, include_in_schema=False)
+def pessoas_fisicas_ui():
+    html_path = Path(__file__).parent / "static" / "pessoas-fisicas.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
@@ -312,6 +370,7 @@ def consultar_cnpj(cnpj: str, _token: str = Depends(_verificar_token)):
         "cep":             re.sub(r"\D", "", d.get("cep", "")),
         "municipio_ibge":  str(d.get("municipio_ibge", "")),
         "uf":              d.get("uf", ""),
+        "optante_simples": d.get("optante_simples", "N"),
     }
 
 
@@ -346,6 +405,8 @@ def get_prestador_schema(
         campos_extras=_CAMPOS_EXTRAS.get(municipio, []),
         campos_obrigatorios=_CAMPOS_OBRIGATORIOS.get(municipio, []),
         cnaes=cnaes,
+        aliq_retencoes=_aliquotas_efetivas(conf),
+        codigo_servico=conf.codigo_servico,
     )
 
 
@@ -418,6 +479,12 @@ def emitir_nfse(
         codigo_cnae=req.codigo_cnae.strip(),
         codigo_tributacao_municipio=req.codigo_tributacao_municipio.strip(),
         valor_iss=valor_iss,
+        valor_pis=_decimal_zero(req.valor_pis),
+        valor_cofins=_decimal_zero(req.valor_cofins),
+        valor_inss=_decimal_zero(req.valor_inss),
+        valor_ir=_decimal_zero(req.valor_ir),
+        valor_csll=_decimal_zero(req.valor_csll),
+        valor_outras_retencoes=_decimal_zero(req.valor_outras_retencoes),
     )
 
     driver = _make_driver(conf)
@@ -479,11 +546,64 @@ def emitir_nfse(
 
 
 # ------------------------------------------------------------------ #
+# Endpoints — Cadastro de Pessoas Físicas                             #
+# ------------------------------------------------------------------ #
+
+_PF_NAO_CONFIGURADO = HTTPException(
+    status_code=503,
+    detail="Cadastro de pessoas físicas não configurado (db_path ausente em api.conf).",
+)
+
+
+@app.get("/pessoas-fisicas", response_model=list[PessoaFisicaSchema])
+def list_pessoas_fisicas(_token: str = Depends(_verificar_token)):
+    if _db_pf is None:
+        raise _PF_NAO_CONFIGURADO
+    return [pf.to_dict() for pf in _db_pf.listar()]
+
+
+@app.get("/pessoas-fisicas/{cpf}", response_model=PessoaFisicaSchema)
+def get_pessoa_fisica(cpf: str, _token: str = Depends(_verificar_token)):
+    if _db_pf is None:
+        raise _PF_NAO_CONFIGURADO
+    pf = _db_pf.buscar(cpf)
+    if pf is None:
+        raise HTTPException(status_code=404, detail="CPF não encontrado no cadastro.")
+    return pf.to_dict()
+
+
+@app.post("/pessoas-fisicas", response_model=PessoaFisicaSchema)
+def upsert_pessoa_fisica(
+    req: PessoaFisicaSchema,
+    _token: str = Depends(_verificar_token),
+):
+    if _db_pf is None:
+        raise _PF_NAO_CONFIGURADO
+    if not req.nome.strip():
+        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
+    from conta_tools_nfse.api.pessoas_fisicas import PessoaFisica
+    pf = PessoaFisica(**req.model_dump())
+    saved = _db_pf.salvar(pf)
+    return saved.to_dict()
+
+
+@app.delete("/pessoas-fisicas/{cpf}", status_code=204)
+def delete_pessoa_fisica(cpf: str, _token: str = Depends(_verificar_token)):
+    if _db_pf is None:
+        raise _PF_NAO_CONFIGURADO
+    if not _db_pf.excluir(cpf):
+        raise HTTPException(status_code=404, detail="CPF não encontrado no cadastro.")
+
+
+# ------------------------------------------------------------------ #
 # Factory chamada por __main__.py                                      #
 # ------------------------------------------------------------------ #
 
 
 def create_app(api_conf: ApiConf) -> FastAPI:
-    global _api_conf
+    global _api_conf, _db_pf
     _api_conf = api_conf
+    if api_conf.db_pessoas_fisicas is not None:
+        from conta_tools_nfse.api.pessoas_fisicas import PessoasFisicasDb
+        _db_pf = PessoasFisicasDb(api_conf.db_pessoas_fisicas)
     return app
