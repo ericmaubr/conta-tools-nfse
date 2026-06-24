@@ -96,6 +96,9 @@ def _cmd_serve(argv: list[str]) -> int:
         for linha in falhas:
             print(linha, file=sys.stderr)
 
+    from conta_tools_nfse.chat import _LOG_FILE
+    print(f"Log do agente:  {_LOG_FILE}")
+    print(f"  monitorar:    Get-Content '{_LOG_FILE}' -Wait -Tail 50 -Encoding utf8")
     print("Pressione Ctrl+C para parar.")
 
     uvicorn.run(app, host=api_conf.host, port=api_conf.port, log_level="warning")

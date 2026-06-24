@@ -600,10 +600,52 @@ def delete_pessoa_fisica(cpf: str, _token: str = Depends(_verificar_token)):
 # ------------------------------------------------------------------ #
 
 
+# ------------------------------------------------------------------ #
+# Endpoint — Chat (emissão inteligente via linguagem natural)          #
+# ------------------------------------------------------------------ #
+
+
+class ChatNfseRequest(BaseModel):
+    mensagem: str
+    historico: list[Any] = []
+    api_key: str | None = None
+    modelo: str = "gemini/gemini-2.5-flash"
+
+
+@app.post("/chat")
+def post_chat(req: ChatNfseRequest):
+    from conta_tools_nfse.chat import responder
+    try:
+        resultado = responder(req.mensagem, req.historico, req.modelo, req.api_key)
+        return resultado
+    except Exception as e:
+        msg = str(e)
+        if any(w in msg.lower() for w in ("api_key", "authentication", "unauthorized", "invalid key", "api key")):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Chave de API inválida ou não configurada para o modelo '{req.modelo}'. {msg}",
+            )
+        raise HTTPException(status_code=500, detail=msg)
+
+
+# ------------------------------------------------------------------ #
+# Factory chamada por __main__.py                                      #
+# ------------------------------------------------------------------ #
+
+
 def create_app(api_conf: ApiConf) -> FastAPI:
     global _api_conf, _db_pf
     _api_conf = api_conf
     if api_conf.db_pessoas_fisicas is not None:
         from conta_tools_nfse.api.pessoas_fisicas import PessoasFisicasDb
         _db_pf = PessoasFisicasDb(api_conf.db_pessoas_fisicas)
+
+    # Inicializa o módulo MCP para ser chamado diretamente pelo endpoint /chat
+    internal_url = f"http://{api_conf.host}:{api_conf.port}"
+    try:
+        from conta_tools_nfse.mcp.server import inicializar
+        inicializar(internal_url, api_conf.bearer_token)
+    except ImportError:
+        pass  # mcp opcional
+
     return app
