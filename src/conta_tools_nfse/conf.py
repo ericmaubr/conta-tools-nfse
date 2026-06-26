@@ -26,6 +26,7 @@ class NfseConf:
     cnpj_prestador: str = ""       # CNPJ explícito para procuração eletrônica;
                                    # se vazio, usa o CNPJ extraído do certificado
     # Alíquotas de retenção (None = usar default do api.conf)
+    aliq_iss: float | None = None
     aliq_pis: float | None = None
     aliq_cofins: float | None = None
     aliq_inss: float | None = None
@@ -117,6 +118,7 @@ def carregar_conf(caminho: Path) -> NfseConf:
         output_dir=output_dir,
         codigo_servico=codigo_servico,
         cnpj_prestador=cnpj_prestador,
+        aliq_iss=_aliq_opt("aliq_iss"),
         aliq_pis=_aliq_opt("aliq_pis"),
         aliq_cofins=_aliq_opt("aliq_cofins"),
         aliq_inss=_aliq_opt("aliq_inss"),

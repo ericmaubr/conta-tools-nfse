@@ -429,10 +429,17 @@
                    onchange="onIssRetidoChange()">
             <label for="iss_retido">ISS Retido pelo tomador</label>
           </div>
-          <label id="row-valor-iss" class="hidden">
-            <span>Valor retenção ISS (R$)</span>
-            <input type="number" id="valor_iss" name="valor_iss" min="0" step="0.01">
-          </label>
+          <div id="row-valor-iss" class="hidden" style="display:flex;gap:8px;align-items:flex-end;">
+            <label style="flex:1;">
+              <span>Alíquota ISS (%)</span>
+              <input type="number" id="aliq_iss" step="0.01" min="0" max="100"
+                     oninput="calcIss()">
+            </label>
+            <label style="flex:2;">
+              <span>Valor ISS retido (R$)</span>
+              <input type="number" id="valor_iss" name="valor_iss" min="0" step="0.01">
+            </label>
+          </div>
         </div>
       </div>
 
@@ -674,8 +681,8 @@
   // ── Alíquotas por prestador ──────────────────────────────────────
   function _popularAliquotas(schema) {
     const a = schema.aliq_retencoes || {};
-    [['pis','aliq_pis'],['cofins','aliq_cofins'],['inss','aliq_inss'],
-     ['ir','aliq_ir'],['csll','aliq_csll']].forEach(([n, key]) => {
+    [['iss','aliq_iss'],['pis','aliq_pis'],['cofins','aliq_cofins'],
+     ['inss','aliq_inss'],['ir','aliq_ir'],['csll','aliq_csll']].forEach(([n, key]) => {
       const el = document.getElementById('aliq_' + n);
       if (el && a[key] !== undefined) el.value = a[key];
     });
@@ -685,7 +692,17 @@
   function onIssRetidoChange() {
     const checked = document.getElementById('iss_retido').checked;
     document.getElementById('row-valor-iss').classList.toggle('hidden', !checked);
-    if (!checked) document.getElementById('valor_iss').value = '';
+    if (checked) {
+      calcIss();
+    } else {
+      document.getElementById('valor_iss').value = '';
+    }
+  }
+
+  function calcIss() {
+    const vs   = parseFloat(document.getElementById('valor_servico').value) || 0;
+    const aliq = parseFloat(document.getElementById('aliq_iss').value) || 0;
+    document.getElementById('valor_iss').value = (aliq / 100 * vs).toFixed(2);
   }
 
   // ── Submit ───────────────────────────────────────────────────────
@@ -957,6 +974,9 @@
   document.getElementById('valor_servico').addEventListener('input', function () {
     if (!document.getElementById('sec-retencoes').classList.contains('hidden')) {
       recalcularRetencoes();
+    }
+    if (document.getElementById('iss_retido').checked) {
+      calcIss();
     }
   });
 

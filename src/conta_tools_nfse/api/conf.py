@@ -16,6 +16,7 @@ class ApiConf:
     cnpj_api_url: str = ""              # URL do conta-tools-cnpj, ex: http://127.0.0.1:8765
     db_pessoas_fisicas: Path | None = None  # SQLite de pessoas físicas
     # Alíquotas-padrão de retenção (podem ser sobrescritas por prestador)
+    aliq_iss: float = 5.00
     aliq_pis: float = 0.65
     aliq_cofins: float = 3.00
     aliq_inss: float = 0.00
@@ -89,6 +90,7 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
         prestadores_dir=prestadores_dir,
         cnpj_api_url=cnpj_api_url,
         db_pessoas_fisicas=db_pessoas_fisicas,
+        aliq_iss=_aliq("aliq_iss", 5.00),
         aliq_pis=_aliq("aliq_pis", 0.65),
         aliq_cofins=_aliq("aliq_cofins", 3.00),
         aliq_inss=_aliq("aliq_inss", 0.00),

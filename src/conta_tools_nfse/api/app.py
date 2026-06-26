@@ -301,6 +301,7 @@ def _aliquotas_efetivas(conf: NfseConf) -> dict:
     def _ef(prestador_val: float | None, api_val: float) -> float:
         return prestador_val if prestador_val is not None else api_val
     return {
+        "aliq_iss":    _ef(conf.aliq_iss,    _api_conf.aliq_iss),
         "aliq_pis":    _ef(conf.aliq_pis,    _api_conf.aliq_pis),
         "aliq_cofins": _ef(conf.aliq_cofins, _api_conf.aliq_cofins),
         "aliq_inss":   _ef(conf.aliq_inss,   _api_conf.aliq_inss),
