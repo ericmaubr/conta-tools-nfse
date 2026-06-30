@@ -93,6 +93,52 @@ src/conta_tools_nfse/
       index.html   # UI single-page HTML/JS (servida pelo FastAPI em GET /)
 ```
 
+## Instalar como serviço Windows (NSSM)
+
+> Pré-requisito: NSSM instalado — ver `conta-tools-web/CLAUDE.md` para instruções de download.
+
+> **Pacotes instalados com `--user`:** o serviço precisa rodar com o mesmo usuário Windows
+> que fez o `pip install --user`, caso contrário o Python não encontra os pacotes.
+> Alternativa: reinstalar sem `--user` para tornar os pacotes disponíveis ao SYSTEM.
+
+**1. Descobrir o caminho do Python** (PowerShell):
+
+```powershell
+where python
+# ou: py -c "import sys; print(sys.executable)"
+```
+
+**2. Registrar o serviço** (PowerShell como Administrador):
+
+```powershell
+nssm install ContaToolsNFSe "C:\caminho\para\python.exe" "-m conta_tools_nfse serve --conf C:\ContaTools\nfse\api.conf"
+nssm set ContaToolsNFSe AppDirectory "C:\ContaTools\nfse"
+nssm set ContaToolsNFSe DisplayName "ContaTools NFS-e (FastAPI)"
+nssm set ContaToolsNFSe Start SERVICE_AUTO_START
+nssm start ContaToolsNFSe
+```
+
+> O `api.conf` precisa estar em um caminho absoluto fixo. Ajuste `C:\ContaTools\nfse\api.conf` conforme o local real do arquivo na máquina de produção.
+
+**3. Se instalado com `--user`: configurar o usuário do serviço**
+
+```powershell
+nssm edit ContaToolsNFSe
+```
+
+Na janela que abrir, vá na aba **Log on** → marque **This account** → informe o usuário e senha Windows.
+
+**Comandos úteis:**
+
+```powershell
+nssm stop ContaToolsNFSe
+nssm restart ContaToolsNFSe
+nssm status ContaToolsNFSe        # deve retornar SERVICE_RUNNING
+nssm remove ContaToolsNFSe confirm
+```
+
+---
+
 ## Servidor REST (`serve`)
 
 Inicia um servidor FastAPI para emissão via interface web ou ferramenta MCP.
