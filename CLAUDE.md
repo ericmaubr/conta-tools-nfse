@@ -148,7 +148,7 @@ Inicia um servidor FastAPI para emissão via interface web ou ferramenta MCP.
 ```ini
 [api]
 host          = 127.0.0.1
-port          = 8080
+port          = 5002
 bearer_token  = meu-token-secreto
 
 [prestadores]
@@ -213,7 +213,7 @@ Permite emissão via linguagem natural através do Claude Desktop / Claude Code.
 
 ```ini
 [api]
-url          = http://192.168.1.100:8080   ; endereço do servidor REST
+url          = http://192.168.1.100:5002   ; endereço do servidor REST
 bearer_token = meu-token-secreto
 ```
 
