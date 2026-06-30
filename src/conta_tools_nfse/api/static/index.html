@@ -257,8 +257,8 @@
 <header>
   <h1>ContaTools</h1>
   <nav>
-    <a href="/" class="active">NFS-e</a>
-    <a href="/pessoas-fisicas-ui">Pessoas Físicas</a>
+    <a href="./" class="active">NFS-e</a>
+    <a href="pessoas-fisicas-ui">Pessoas Físicas</a>
   </nav>
   <span class="version" id="app-version"></span>
 </header>
@@ -513,7 +513,7 @@
 </div><!-- /layout -->
 
 <script>
-  fetch('/version').then(r => r.json()).then(d => {
+  fetch('version').then(r => r.json()).then(d => {
     document.getElementById('app-version').textContent = 'v' + d.version;
   }).catch(() => {});
 
@@ -569,7 +569,7 @@
     statusEl.style.color = '#888';
     statusEl.textContent = 'Conectando...';
     try {
-      const lista = await api('GET', '/prestadores');
+      const lista = await api('GET', 'prestadores');
       const sel = document.getElementById('sel-prestador');
       sel.innerHTML = '<option value="">Selecione...</option>';
       lista.forEach(p => {
@@ -602,7 +602,7 @@
     if (!id) { currentSchema = null; return; }
 
     try {
-      const schema = await api('GET', '/prestadores/' + id);
+      const schema = await api('GET', 'prestadores/' + id);
       currentSchema = schema;
 
       _popularCnae(schema);
@@ -615,7 +615,7 @@
       // Busca próximo RPS de forma assíncrona
       document.getElementById('numero_rps').value = '';
       document.getElementById('rps-loading').classList.remove('hidden');
-      api('GET', '/prestadores/' + id + '/proximo-rps')
+      api('GET', 'prestadores/' + id + '/proximo-rps')
         .then(d => {
           document.getElementById('numero_rps').value = d.proximo_rps;
         })
@@ -764,7 +764,7 @@
     };
 
     try {
-      const r = await api('POST', '/nfse', body);
+      const r = await api('POST', 'nfse', body);
 
       const rpsUsado   = parseInt(numero_rps, 10);
       const rpsProximo = (r.rps_ajustado ? parseInt(r.rps_ajustado.para, 10) : rpsUsado) + 1;
@@ -853,7 +853,7 @@
     status.style.color = '#888'; status.textContent = 'Consultando...';
 
     try {
-      const d = await api('GET', '/cnpj/' + cnpj);
+      const d = await api('GET', 'cnpj/' + cnpj);
       document.getElementById('tomador_razao_social').value   = d.razao_social   || '';
       document.getElementById('tomador_email').value          = d.email          || '';
       document.getElementById('tomador_logradouro').value     = d.logradouro     || '';
@@ -901,7 +901,7 @@
     status.style.color = '#888'; status.textContent = 'Consultando...';
 
     try {
-      const d = await api('GET', '/pessoas-fisicas/' + cpf);
+      const d = await api('GET', 'pessoas-fisicas/' + cpf);
       document.getElementById('tomador_razao_social').value   = d.nome           || '';
       document.getElementById('tomador_email').value          = d.email          || '';
       document.getElementById('tomador_logradouro').value     = d.logradouro     || '';
@@ -917,7 +917,7 @@
     } catch (e) {
       if (e.message && e.message.includes('não encontrado')) {
         status.style.color = '#b45000';
-        status.innerHTML = '⚠ CPF não cadastrado — <a href="/pessoas-fisicas-ui?cpf=' + cpf + '&modo=novo" target="_blank" style="color:#b45000;">Cadastrar</a>';
+        status.innerHTML = '⚠ CPF não cadastrado — <a href="pessoas-fisicas-ui?cpf=' + cpf + '&modo=novo" target="_blank" style="color:#b45000;">Cadastrar</a>';
       } else {
         status.style.color = '#888';
         status.textContent = '';  // sem cadastro configurado — ignora silenciosamente

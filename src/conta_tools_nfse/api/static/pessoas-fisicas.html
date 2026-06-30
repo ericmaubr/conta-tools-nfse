@@ -199,8 +199,8 @@
 <header>
   <h1>ContaTools</h1>
   <nav>
-    <a href="/">NFS-e</a>
-    <a href="/pessoas-fisicas-ui" class="active">Pessoas Físicas</a>
+    <a href="./">NFS-e</a>
+    <a href="pessoas-fisicas-ui" class="active">Pessoas Físicas</a>
   </nav>
 </header>
 
@@ -410,7 +410,7 @@
     const st = document.getElementById('token-status');
     st.style.color = '#888'; st.textContent = 'Carregando...';
     try {
-      _dados = await api('GET', '/pessoas-fisicas');
+      _dados = await api('GET', 'pessoas-fisicas');
       document.getElementById('conteudo').classList.remove('hidden');
       st.style.color = '#2e7d32';
       st.textContent = '✓ ' + _dados.length + ' registro(s)';
@@ -542,7 +542,7 @@
     };
 
     try {
-      await api('POST', '/pessoas-fisicas', body);
+      await api('POST', 'pessoas-fisicas', body);
       fecharForm();
       await carregar();
       mostrarAlert('ok', 'Pessoa física salva com sucesso.');
@@ -557,7 +557,7 @@
   async function excluir(cpf, nome) {
     if (!confirm('Excluir ' + nome + ' (' + fmtCpfStr(cpf) + ')?\n\nEsta ação não pode ser desfeita.')) return;
     try {
-      await api('DELETE', '/pessoas-fisicas/' + cpf);
+      await api('DELETE', 'pessoas-fisicas/' + cpf);
       await carregar();
       mostrarAlert('ok', 'Registro excluído.');
     } catch (err) {
