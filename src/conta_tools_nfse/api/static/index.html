@@ -29,6 +29,7 @@
       gap: 16px;
     }
     header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    header .version { font-size: 11px; color: rgba(255,255,255,.35); margin-left: auto; }
     nav { display: flex; gap: 4px; }
     nav a {
       color: rgba(255,255,255,.65);
@@ -259,6 +260,7 @@
     <a href="/" class="active">NFS-e</a>
     <a href="/pessoas-fisicas-ui">Pessoas Físicas</a>
   </nav>
+  <span class="version" id="app-version"></span>
 </header>
 
 <div class="layout">
@@ -511,6 +513,10 @@
 </div><!-- /layout -->
 
 <script>
+  fetch('/version').then(r => r.json()).then(d => {
+    document.getElementById('app-version').textContent = 'v' + d.version;
+  }).catch(() => {});
+
   // ── Estado ──────────────────────────────────────────────────────
   let TOKEN = localStorage.getItem('nfse_token') || '';
   let currentSchema = null;

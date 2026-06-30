@@ -326,6 +326,12 @@ def _decimal_zero(valor: str | None) -> Decimal:
 app = FastAPI(title="ContaTools NFS-e API", version="1.0")
 
 
+@app.get("/version", include_in_schema=False)
+def version():
+    from importlib.metadata import version as pkg_version
+    return {"version": pkg_version("conta-tools-nfse")}
+
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def index():
     html_path = Path(__file__).parent / "static" / "index.html"
