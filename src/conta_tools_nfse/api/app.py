@@ -665,6 +665,26 @@ _TPL_NAO_CONFIGURADO = HTTPException(
 _CATEGORIAS_VALIDAS = {"global", "prestador", "prestador_cliente"}
 
 
+def _validar_template(req: TemplateSchema) -> None:
+    if not req.nome.strip():
+        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
+    if req.categoria not in _CATEGORIAS_VALIDAS:
+        raise HTTPException(status_code=422, detail=f"Categoria inválida: {req.categoria!r}")
+    if req.categoria != "global" and not (req.prestador_id or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Campo 'prestador_id' é obrigatório para categorias 'prestador' e 'prestador_cliente'.",
+        )
+    if req.categoria == "prestador_cliente":
+        cnpj = (req.tomador_cnpj or "").strip()
+        cpf  = (req.tomador_cpf  or "").strip()
+        if not cnpj and not cpf:
+            raise HTTPException(
+                status_code=422,
+                detail="Templates 'prestador_cliente' exigem CNPJ ou CPF do tomador.",
+            )
+
+
 @app.get("/templates", response_model=list[TemplateSchema])
 def list_templates(
     prestador_id: str | None = None,
@@ -689,10 +709,7 @@ def get_template(template_id: str, _token: str = Depends(_verificar_token)):
 def create_template(req: TemplateSchema, _token: str = Depends(_verificar_token)):
     if _db_tpl is None:
         raise _TPL_NAO_CONFIGURADO
-    if not req.nome.strip():
-        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
-    if req.categoria not in _CATEGORIAS_VALIDAS:
-        raise HTTPException(status_code=422, detail=f"Categoria inválida: {req.categoria!r}")
+    _validar_template(req)
     from conta_tools_nfse.api.templates import Template as Tpl
     t = Tpl(
         id=str(uuid.uuid4()),
@@ -736,10 +753,7 @@ def update_template(
 ):
     if _db_tpl is None:
         raise _TPL_NAO_CONFIGURADO
-    if not req.nome.strip():
-        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
-    if req.categoria not in _CATEGORIAS_VALIDAS:
-        raise HTTPException(status_code=422, detail=f"Categoria inválida: {req.categoria!r}")
+    _validar_template(req)
     from conta_tools_nfse.api.templates import Template as Tpl
     t = Tpl(
         id=template_id,

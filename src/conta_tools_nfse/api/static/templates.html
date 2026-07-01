@@ -111,9 +111,12 @@
     .tpl-serv { font-size: 11px; color: #555; }
 
     .row-actions { display: flex; gap: 6px; white-space: nowrap; }
-    .btn-edit, .btn-del {
-      padding: 4px 10px; border-radius: 4px; border: none;
-      font-size: 11px; font-weight: 600; cursor: pointer; transition: background .15s;
+    .row-actions { display: flex; gap: 4px; }
+    .btn-icon {
+      width: 28px; height: 28px; border-radius: 5px; border: none;
+      font-size: 14px; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
     .btn-edit { background: #e8f0fe; color: #1a3c5e; }
     .btn-edit:hover { background: #c5d8f7; }
@@ -159,6 +162,15 @@
     .mbtn.primary:hover { background: #245082; }
     .mbtn.secondary { background: #f0f2f5; color: #444; border: 1px solid #d0d5dd; }
     .mbtn.secondary:hover { background: #e4e8ef; }
+
+    .cnpj-btn {
+      padding: 0 9px; border: 1px solid #ccc; border-radius: 5px;
+      background: #f5f5f5; cursor: pointer; font-size: 14px;
+      transition: background .15s; flex-shrink: 0; height: 32px;
+    }
+    .cnpj-btn:hover { background: #e8e8e8; }
+    .cnpj-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .cnpj-status { font-size: 10px; margin-top: 2px; min-height: 13px; color: #888; }
 
     /* Toast */
     #toast {
@@ -233,11 +245,11 @@
     <table class="tpl-table hidden" id="tpl-table">
       <thead>
         <tr>
-          <th style="width:36%">Nome</th>
-          <th style="width:14%">Categoria</th>
-          <th style="width:22%">Prestador / Tomador</th>
-          <th style="width:18%">Serviço</th>
-          <th style="width:10%"></th>
+          <th style="width:68px"></th>
+          <th style="width:33%">Nome</th>
+          <th style="width:13%">Categoria</th>
+          <th style="width:24%">Prestador / Tomador</th>
+          <th>Serviço</th>
         </tr>
       </thead>
       <tbody id="tpl-body"></tbody>
@@ -268,17 +280,17 @@
     <div class="mf-row g3">
       <div class="mf">
         <label><span class="lbl">Categoria <span style="color:#d00">*</span></span>
-          <select id="ed-categoria">
+          <select id="ed-categoria" onchange="onCategoriaChange()">
             <option value="prestador_cliente">Prestador-cliente</option>
             <option value="prestador">Do prestador</option>
             <option value="global">Global</option>
           </select>
         </label>
       </div>
-      <div class="mf">
-        <label><span class="lbl">Prestador</span>
+      <div class="mf" id="ed-prestador-wrap">
+        <label><span class="lbl">Prestador <span style="color:#d00" id="ed-prestador-req">*</span></span>
           <select id="ed-prestador-id">
-            <option value="">— (nenhum / global)</option>
+            <option value="">— selecione —</option>
           </select>
         </label>
       </div>
@@ -292,14 +304,20 @@
     <div class="section-title">Tomador</div>
     <div class="mf-row g2">
       <div class="mf">
-        <label><span class="lbl">CNPJ</span>
-          <input type="text" id="ed-tomador-cnpj" maxlength="18">
-        </label>
+        <span class="lbl">CNPJ</span>
+        <div style="display:flex;gap:5px;">
+          <input type="text" id="ed-tomador-cnpj" maxlength="18" style="flex:1;">
+          <button type="button" class="cnpj-btn" onclick="buscarCnpjModal()" title="Buscar CNPJ">🔍</button>
+        </div>
+        <div class="cnpj-status" id="ed-cnpj-status"></div>
       </div>
       <div class="mf">
-        <label><span class="lbl">CPF</span>
-          <input type="text" id="ed-tomador-cpf" maxlength="14">
-        </label>
+        <span class="lbl">CPF</span>
+        <div style="display:flex;gap:5px;">
+          <input type="text" id="ed-tomador-cpf" maxlength="14" style="flex:1;">
+          <button type="button" class="cnpj-btn" onclick="buscarCpfModal()" title="Buscar CPF">🔍</button>
+        </div>
+        <div class="cnpj-status" id="ed-cpf-status"></div>
       </div>
     </div>
     <div class="mf-row g2">
@@ -539,6 +557,12 @@
     lista.forEach(t => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td style="padding:6px 8px;">
+          <div class="row-actions">
+            <button class="btn-icon btn-edit" onclick="abrirModalEditar('${esc(t.id)}')" title="Editar">✏</button>
+            <button class="btn-icon btn-del"  onclick="excluirTemplate('${esc(t.id)}', '${esc(t.nome)}')" title="Excluir">🗑</button>
+          </div>
+        </td>
         <td>
           <div class="tpl-nome">${esc(t.nome)}</div>
           ${t.descricao ? '<div class="tpl-desc">' + esc(t.descricao) + '</div>' : ''}
@@ -553,12 +577,6 @@
         <td class="tpl-serv">
           ${t.codigo_servico ? '<div>' + esc(t.codigo_servico) + '</div>' : ''}
           ${t.valor_servico ? '<div>R$ ' + esc(t.valor_servico) + '</div>' : ''}
-        </td>
-        <td>
-          <div class="row-actions">
-            <button class="btn-edit" onclick="abrirModalEditar('${esc(t.id)}')">Editar</button>
-            <button class="btn-del"  onclick="excluirTemplate('${esc(t.id)}', '${esc(t.nome)}')">Excluir</button>
-          </div>
         </td>
       `;
       body.appendChild(tr);
@@ -587,11 +605,86 @@
     renderizar(filtrado);
   }
 
+  // ── Categoria → controla prestador ───────────────────────────────
+  function onCategoriaChange() {
+    const cat = document.getElementById('ed-categoria').value;
+    const wrap = document.getElementById('ed-prestador-wrap');
+    const sel  = document.getElementById('ed-prestador-id');
+    if (cat === 'global') {
+      wrap.style.opacity = '.4';
+      sel.disabled = true;
+      sel.value = '';
+    } else {
+      wrap.style.opacity = '1';
+      sel.disabled = false;
+    }
+  }
+
+  // ── Busca CNPJ no modal ───────────────────────────────────────────
+  async function buscarCnpjModal() {
+    const cnpj   = document.getElementById('ed-tomador-cnpj').value.replace(/\D/g, '');
+    const status = document.getElementById('ed-cnpj-status');
+    const btn    = event.currentTarget;
+    if (cnpj.length !== 14) { status.style.color='#c62828'; status.textContent='CNPJ deve ter 14 dígitos.'; return; }
+    btn.disabled = true; btn.textContent = '⏳';
+    status.style.color = '#888'; status.textContent = 'Consultando...';
+    try {
+      const d = await api('GET', 'cnpj/' + cnpj);
+      const set = (id, v) => { const el=document.getElementById(id); if(el && v) el.value=v; };
+      set('ed-tomador-razao',      d.razao_social);
+      set('ed-tomador-email',      d.email);
+      set('ed-tomador-logradouro', d.logradouro);
+      set('ed-tomador-numero',     d.numero);
+      set('ed-tomador-complemento',d.complemento);
+      set('ed-tomador-bairro',     d.bairro);
+      set('ed-tomador-cep',        (d.cep||'').replace(/\D/g,''));
+      set('ed-tomador-uf',         d.uf);
+      set('ed-tomador-ibge',       d.municipio_ibge);
+      status.style.color = '#2e7d32'; status.textContent = '✓ Dados preenchidos';
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    } catch(e) {
+      status.style.color = '#c62828'; status.textContent = '✗ ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍';
+    }
+  }
+
+  // ── Busca CPF no modal ────────────────────────────────────────────
+  async function buscarCpfModal() {
+    const cpf    = document.getElementById('ed-tomador-cpf').value.replace(/\D/g, '');
+    const status = document.getElementById('ed-cpf-status');
+    const btn    = event.currentTarget;
+    if (cpf.length !== 11) { status.style.color='#c62828'; status.textContent='CPF deve ter 11 dígitos.'; return; }
+    btn.disabled = true; btn.textContent = '⏳';
+    status.style.color = '#888'; status.textContent = 'Consultando...';
+    try {
+      const d = await api('GET', 'pessoas-fisicas/' + cpf);
+      const set = (id, v) => { const el=document.getElementById(id); if(el && v) el.value=v; };
+      set('ed-tomador-razao',      d.nome);
+      set('ed-tomador-email',      d.email);
+      set('ed-tomador-logradouro', d.logradouro);
+      set('ed-tomador-numero',     d.numero);
+      set('ed-tomador-complemento',d.complemento);
+      set('ed-tomador-bairro',     d.bairro);
+      set('ed-tomador-cep',        d.cep);
+      set('ed-tomador-uf',         d.uf);
+      set('ed-tomador-ibge',       d.municipio_ibge);
+      status.style.color = '#2e7d32'; status.textContent = '✓ Dados preenchidos';
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    } catch(e) {
+      status.style.color = (e.message||'').includes('não encontrado') ? '#b45000' : '#c62828';
+      status.textContent = '✗ ' + e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍';
+    }
+  }
+
   // ── Modal ─────────────────────────────────────────────────────────
   function abrirModalNovo() {
     document.getElementById('modal-title').textContent = 'Novo template';
     document.getElementById('ed-id').value = '';
     limparFormModal();
+    onCategoriaChange();
     document.getElementById('modal-edit').classList.add('open');
     document.getElementById('ed-nome').focus();
   }
@@ -602,6 +695,7 @@
     document.getElementById('modal-title').textContent = 'Editar template';
     document.getElementById('ed-id').value = t.id;
     preencherFormModal(t);
+    onCategoriaChange();
     document.getElementById('modal-edit').classList.add('open');
     document.getElementById('ed-nome').focus();
   }
@@ -695,6 +789,16 @@
     const body = coletarFormModal();
     if (!body.nome) {
       document.getElementById('ed-nome').focus();
+      return;
+    }
+    if (body.categoria !== 'global' && !body.prestador_id) {
+      document.getElementById('ed-prestador-id').focus();
+      alert('Selecione o prestador para esta categoria.');
+      return;
+    }
+    if (body.categoria === 'prestador_cliente' && !body.tomador_cnpj && !body.tomador_cpf) {
+      document.getElementById('ed-tomador-cnpj').focus();
+      alert('Informe o CNPJ ou CPF do tomador para templates Prestador-cliente.');
       return;
     }
     const id = document.getElementById('ed-id').value;
