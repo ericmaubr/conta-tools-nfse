@@ -216,7 +216,11 @@
 
   <div class="main-area">
 
-    <div class="toolbar hidden" id="toolbar">
+    <div class="toolbar hidden" id="toolbar-novo">
+      <button class="btn-new" onclick="abrirModalNovo()">+ Novo template</button>
+    </div>
+
+    <div class="toolbar hidden" id="toolbar-filtros">
       <input type="text" id="busca" placeholder="Buscar por nome..." oninput="aplicarFiltro()">
       <select id="fil-cat-bar" onchange="aplicarFiltro()">
         <option value="">Todas as categorias</option>
@@ -224,7 +228,6 @@
         <option value="prestador">Do prestador</option>
         <option value="global">Global</option>
       </select>
-      <button class="btn-new" onclick="abrirModalNovo()">+ Novo template</button>
     </div>
 
     <table class="tpl-table hidden" id="tpl-table">
@@ -444,7 +447,8 @@
     document.getElementById('token-input').value = '';
     document.getElementById('sb-divider').classList.add('hidden');
     document.getElementById('sec-filtros').classList.add('hidden');
-    document.getElementById('toolbar').classList.add('hidden');
+    document.getElementById('toolbar-novo').classList.add('hidden');
+    document.getElementById('toolbar-filtros').classList.add('hidden');
     document.getElementById('tpl-table').classList.add('hidden');
     document.getElementById('tpl-empty').classList.add('hidden');
   }
@@ -470,34 +474,44 @@
     const statusEl = document.getElementById('token-status');
     statusEl.style.color = '#888';
     statusEl.textContent = 'Conectando...';
+
+    // Valida o token com uma chamada rápida aos prestadores
+    let prestadores = [];
     try {
-      const [templates, prestadores] = await Promise.all([
-        api('GET', 'templates'),
-        api('GET', 'prestadores'),
-      ]);
-      _todosTemplates = templates;
-      _prestadores = prestadores;
-
-      // Preenche filtro prestador
-      const sel = document.getElementById('fil-prestador');
-      sel.innerHTML = '<option value="">Todos</option>';
-      prestadores.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id; opt.textContent = p.nome;
-        sel.appendChild(opt);
-      });
-
-      document.getElementById('sb-divider').classList.remove('hidden');
-      document.getElementById('sec-filtros').classList.remove('hidden');
-      document.getElementById('toolbar').classList.remove('hidden');
-
-      statusEl.textContent = '✓ ' + templates.length + ' template(s)';
-      statusEl.style.color = '#2e7d32';
-
-      renderizar(_todosTemplates);
+      prestadores = await api('GET', 'prestadores');
     } catch (e) {
       statusEl.textContent = '✗ ' + e.message;
       statusEl.style.color = '#c62828';
+      return;
+    }
+
+    _prestadores = prestadores;
+
+    // Botão de novo template fica disponível imediatamente após auth
+    document.getElementById('sb-divider').classList.remove('hidden');
+    document.getElementById('toolbar-novo').classList.remove('hidden');
+    statusEl.textContent = '✓ Conectado';
+    statusEl.style.color = '#2e7d32';
+
+    // Preenche filtro prestador na sidebar
+    const sel = document.getElementById('fil-prestador');
+    sel.innerHTML = '<option value="">Todos</option>';
+    prestadores.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.nome;
+      sel.appendChild(opt);
+    });
+
+    // Carrega templates (pode falhar se não configurado — mostra mensagem)
+    try {
+      _todosTemplates = await api('GET', 'templates');
+      document.getElementById('sec-filtros').classList.remove('hidden');
+      document.getElementById('toolbar-filtros').classList.remove('hidden');
+      statusEl.textContent = '✓ ' + _todosTemplates.length + ' template(s)';
+      renderizar(_todosTemplates);
+    } catch (e) {
+      statusEl.textContent = '✓ Conectado (templates: ' + e.message + ')';
+      renderizar([]);
     }
   }
 
@@ -706,8 +720,9 @@
 
   async function recarregar() {
     _todosTemplates = await api('GET', 'templates');
-    document.getElementById('token-status').textContent =
-      '✓ ' + _todosTemplates.length + ' template(s)';
+    document.getElementById('token-status').textContent = '✓ ' + _todosTemplates.length + ' template(s)';
+    document.getElementById('toolbar-filtros').classList.remove('hidden');
+    document.getElementById('sec-filtros').classList.remove('hidden');
     aplicarFiltro();
   }
 

@@ -1099,11 +1099,10 @@
         opt.textContent = badge + ' ' + t.nome;
         sel.appendChild(opt);
       });
-      if (lista.length > 0) {
         document.getElementById('sec-template').classList.remove('hidden');
-      }
     } catch (e) {
-      // Templates são opcionais — erro silencioso
+      // Templates são opcionais — mostra seção vazia mesmo assim
+      document.getElementById('sec-template').classList.remove('hidden');
     }
   }
 
