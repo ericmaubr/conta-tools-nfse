@@ -276,8 +276,10 @@
         </label>
       </div>
       <div class="mf">
-        <label><span class="lbl">Prestador (ID)</span>
-          <input type="text" id="ed-prestador-id" placeholder="ex: empresa_xyz">
+        <label><span class="lbl">Prestador</span>
+          <select id="ed-prestador-id">
+            <option value="">— (nenhum / global)</option>
+          </select>
         </label>
       </div>
       <div class="mf">
@@ -493,13 +495,17 @@
     statusEl.textContent = '✓ Conectado';
     statusEl.style.color = '#2e7d32';
 
-    // Preenche filtro prestador na sidebar
+    // Preenche filtro prestador na sidebar e dropdown do modal
     const sel = document.getElementById('fil-prestador');
+    const selModal = document.getElementById('ed-prestador-id');
     sel.innerHTML = '<option value="">Todos</option>';
+    selModal.innerHTML = '<option value="">— (nenhum / global)</option>';
     prestadores.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id; opt.textContent = p.nome;
-      sel.appendChild(opt);
+      [sel, selModal].forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.nome;
+        s.appendChild(opt);
+      });
     });
 
     // Carrega templates (pode falhar se não configurado — mostra mensagem)
