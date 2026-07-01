@@ -32,6 +32,12 @@ try:
 except ImportError:
     _db_pf = None  # type: ignore[assignment]
 
+try:
+    from conta_tools_nfse.api.templates import Template, TemplatesDb
+    _db_tpl: TemplatesDb | None = None
+except ImportError:
+    _db_tpl = None  # type: ignore[assignment]
+
 # ------------------------------------------------------------------ #
 # Helpers de autenticação                                             #
 # ------------------------------------------------------------------ #
@@ -124,6 +130,40 @@ class PessoaFisicaSchema(BaseModel):
     email: str = ""
     celular: str = ""
     fixo: str = ""
+
+
+class TemplateSchema(BaseModel):
+    id: str = ""
+    nome: str
+    categoria: str                              # 'global' | 'prestador' | 'prestador_cliente'
+    descricao: str | None = None
+    prestador_id: str | None = None
+    tomador_cnpj: str | None = None
+    tomador_cpf: str | None = None
+    tomador_razao_social: str | None = None
+    tomador_email: str | None = None
+    tomador_logradouro: str | None = None
+    tomador_numero: str | None = None
+    tomador_complemento: str | None = None
+    tomador_bairro: str | None = None
+    tomador_cep: str | None = None
+    tomador_municipio_ibge: str | None = None
+    tomador_uf: str | None = None
+    discriminacao: str | None = None
+    codigo_servico: str | None = None
+    codigo_cnae: str | None = None
+    codigo_tributacao_municipio: str | None = None
+    valor_servico: str | None = None
+    iss_retido: bool | None = None
+    valor_iss: str | None = None
+    valor_pis: str | None = None
+    valor_cofins: str | None = None
+    valor_inss: str | None = None
+    valor_ir: str | None = None
+    valor_csll: str | None = None
+    valor_outras_retencoes: str | None = None
+    criado_em: str = ""
+    atualizado_em: str = ""
 
 
 # ------------------------------------------------------------------ #
@@ -341,6 +381,12 @@ def index():
 @app.get("/pessoas-fisicas-ui", response_class=HTMLResponse, include_in_schema=False)
 def pessoas_fisicas_ui():
     html_path = Path(__file__).parent / "static" / "pessoas-fisicas.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/templates-ui", response_class=HTMLResponse, include_in_schema=False)
+def templates_ui():
+    html_path = Path(__file__).parent / "static" / "templates.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
@@ -608,6 +654,139 @@ def delete_pessoa_fisica(cpf: str, _token: str = Depends(_verificar_token)):
 
 
 # ------------------------------------------------------------------ #
+# Endpoints — Templates de emissão                                     #
+# ------------------------------------------------------------------ #
+
+_TPL_NAO_CONFIGURADO = HTTPException(
+    status_code=503,
+    detail="Templates não configurados (db_path ausente na seção [templates] de api.conf).",
+)
+
+_CATEGORIAS_VALIDAS = {"global", "prestador", "prestador_cliente"}
+
+
+@app.get("/templates", response_model=list[TemplateSchema])
+def list_templates(
+    prestador_id: str | None = None,
+    _token: str = Depends(_verificar_token),
+):
+    if _db_tpl is None:
+        raise _TPL_NAO_CONFIGURADO
+    return [t.to_dict() for t in _db_tpl.listar(prestador_id)]
+
+
+@app.get("/templates/{template_id}", response_model=TemplateSchema)
+def get_template(template_id: str, _token: str = Depends(_verificar_token)):
+    if _db_tpl is None:
+        raise _TPL_NAO_CONFIGURADO
+    t = _db_tpl.buscar(template_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Template não encontrado.")
+    return t.to_dict()
+
+
+@app.post("/templates", response_model=TemplateSchema, status_code=201)
+def create_template(req: TemplateSchema, _token: str = Depends(_verificar_token)):
+    if _db_tpl is None:
+        raise _TPL_NAO_CONFIGURADO
+    if not req.nome.strip():
+        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
+    if req.categoria not in _CATEGORIAS_VALIDAS:
+        raise HTTPException(status_code=422, detail=f"Categoria inválida: {req.categoria!r}")
+    from conta_tools_nfse.api.templates import Template as Tpl
+    t = Tpl(
+        id=str(uuid.uuid4()),
+        nome=req.nome.strip(),
+        categoria=req.categoria,
+        descricao=req.descricao,
+        prestador_id=req.prestador_id,
+        tomador_cnpj=req.tomador_cnpj,
+        tomador_cpf=req.tomador_cpf,
+        tomador_razao_social=req.tomador_razao_social,
+        tomador_email=req.tomador_email,
+        tomador_logradouro=req.tomador_logradouro,
+        tomador_numero=req.tomador_numero,
+        tomador_complemento=req.tomador_complemento,
+        tomador_bairro=req.tomador_bairro,
+        tomador_cep=req.tomador_cep,
+        tomador_municipio_ibge=req.tomador_municipio_ibge,
+        tomador_uf=req.tomador_uf,
+        discriminacao=req.discriminacao,
+        codigo_servico=req.codigo_servico,
+        codigo_cnae=req.codigo_cnae,
+        codigo_tributacao_municipio=req.codigo_tributacao_municipio,
+        valor_servico=req.valor_servico,
+        iss_retido=req.iss_retido,
+        valor_iss=req.valor_iss,
+        valor_pis=req.valor_pis,
+        valor_cofins=req.valor_cofins,
+        valor_inss=req.valor_inss,
+        valor_ir=req.valor_ir,
+        valor_csll=req.valor_csll,
+        valor_outras_retencoes=req.valor_outras_retencoes,
+    )
+    return _db_tpl.criar(t).to_dict()
+
+
+@app.put("/templates/{template_id}", response_model=TemplateSchema)
+def update_template(
+    template_id: str,
+    req: TemplateSchema,
+    _token: str = Depends(_verificar_token),
+):
+    if _db_tpl is None:
+        raise _TPL_NAO_CONFIGURADO
+    if not req.nome.strip():
+        raise HTTPException(status_code=422, detail="Campo 'nome' é obrigatório.")
+    if req.categoria not in _CATEGORIAS_VALIDAS:
+        raise HTTPException(status_code=422, detail=f"Categoria inválida: {req.categoria!r}")
+    from conta_tools_nfse.api.templates import Template as Tpl
+    t = Tpl(
+        id=template_id,
+        nome=req.nome.strip(),
+        categoria=req.categoria,
+        descricao=req.descricao,
+        prestador_id=req.prestador_id,
+        tomador_cnpj=req.tomador_cnpj,
+        tomador_cpf=req.tomador_cpf,
+        tomador_razao_social=req.tomador_razao_social,
+        tomador_email=req.tomador_email,
+        tomador_logradouro=req.tomador_logradouro,
+        tomador_numero=req.tomador_numero,
+        tomador_complemento=req.tomador_complemento,
+        tomador_bairro=req.tomador_bairro,
+        tomador_cep=req.tomador_cep,
+        tomador_municipio_ibge=req.tomador_municipio_ibge,
+        tomador_uf=req.tomador_uf,
+        discriminacao=req.discriminacao,
+        codigo_servico=req.codigo_servico,
+        codigo_cnae=req.codigo_cnae,
+        codigo_tributacao_municipio=req.codigo_tributacao_municipio,
+        valor_servico=req.valor_servico,
+        iss_retido=req.iss_retido,
+        valor_iss=req.valor_iss,
+        valor_pis=req.valor_pis,
+        valor_cofins=req.valor_cofins,
+        valor_inss=req.valor_inss,
+        valor_ir=req.valor_ir,
+        valor_csll=req.valor_csll,
+        valor_outras_retencoes=req.valor_outras_retencoes,
+    )
+    updated = _db_tpl.atualizar(t)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Template não encontrado.")
+    return updated.to_dict()
+
+
+@app.delete("/templates/{template_id}", status_code=204)
+def delete_template(template_id: str, _token: str = Depends(_verificar_token)):
+    if _db_tpl is None:
+        raise _TPL_NAO_CONFIGURADO
+    if not _db_tpl.excluir(template_id):
+        raise HTTPException(status_code=404, detail="Template não encontrado.")
+
+
+# ------------------------------------------------------------------ #
 # Endpoint — Chat (emissão inteligente via linguagem natural)          #
 # ------------------------------------------------------------------ #
 
@@ -641,11 +820,14 @@ def post_chat(req: ChatNfseRequest):
 
 
 def create_app(api_conf: ApiConf) -> FastAPI:
-    global _api_conf, _db_pf
+    global _api_conf, _db_pf, _db_tpl
     _api_conf = api_conf
     if api_conf.db_pessoas_fisicas is not None:
         from conta_tools_nfse.api.pessoas_fisicas import PessoasFisicasDb
         _db_pf = PessoasFisicasDb(api_conf.db_pessoas_fisicas)
+    if api_conf.db_templates is not None:
+        from conta_tools_nfse.api.templates import TemplatesDb
+        _db_tpl = TemplatesDb(api_conf.db_templates)
 
     # Inicializa o módulo MCP para ser chamado diretamente pelo endpoint /chat
     internal_url = f"http://{api_conf.host}:{api_conf.port}"

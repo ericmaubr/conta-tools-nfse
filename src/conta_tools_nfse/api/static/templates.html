@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContaTools — Templates</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px; background: #f0f2f5; color: #222;
+      display: flex; flex-direction: column;
+    }
+
+    header {
+      flex-shrink: 0; background: #1a3c5e; color: #fff;
+      padding: 11px 20px; display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    header .version { font-size: 11px; color: rgba(255,255,255,.35); margin-left: auto; }
+    nav { display: flex; gap: 4px; }
+    nav a {
+      color: rgba(255,255,255,.65); text-decoration: none; font-size: 12px;
+      padding: 4px 10px; border-radius: 4px; transition: background .15s, color .15s;
+    }
+    nav a:hover { background: rgba(255,255,255,.1); color: #fff; }
+    nav a.active { background: rgba(255,255,255,.18); color: #fff; font-weight: 600; }
+
+    .layout { flex: 1; display: flex; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 232px; flex-shrink: 0; background: #fff;
+      border-right: 1px solid #dde3ea; overflow-y: auto;
+      padding: 16px 14px; display: flex; flex-direction: column;
+    }
+    .sb-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: #888; margin-bottom: 8px;
+    }
+    .sb-section { margin-bottom: 14px; }
+    .sb-status { font-size: 11px; margin-top: 5px; color: #888; line-height: 1.4; }
+    .sb-btn-row { display: flex; gap: 6px; margin-top: 7px; }
+    .sb-btn {
+      flex: 1; padding: 6px 0; border-radius: 5px; border: none;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s;
+    }
+    .sb-btn.primary { background: #1a3c5e; color: #fff; }
+    .sb-btn.primary:hover { background: #245082; }
+    .sb-btn.secondary { background: #f0f2f5; color: #444; border: 1px solid #d0d5dd; }
+    .sb-btn.secondary:hover { background: #e4e8ef; }
+    .sidebar input[type=password], .sidebar select, .sidebar input[type=text] {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px;
+      font-size: 13px; color: #222; background: #fff;
+    }
+    .sidebar input:focus, .sidebar select:focus {
+      outline: none; border-color: #1a3c5e; box-shadow: 0 0 0 2px rgba(26,60,94,.12);
+    }
+    .sidebar input[type=password] { font-family: monospace; }
+    .sb-divider { border: none; border-top: 1px solid #eaecf0; margin: 12px 0; }
+    .hidden { display: none !important; }
+
+    /* Main */
+    .main-area { flex: 1; overflow-y: auto; padding: 14px 16px; }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .toolbar input[type=text] {
+      padding: 6px 10px; border: 1px solid #ccc; border-radius: 5px;
+      font-size: 13px; width: 220px;
+    }
+    .toolbar input:focus { outline: none; border-color: #1a3c5e; box-shadow: 0 0 0 2px rgba(26,60,94,.12); }
+    .toolbar select {
+      padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px;
+      font-size: 13px; cursor: pointer; background: #fff;
+    }
+    .toolbar select:focus { outline: none; border-color: #1a3c5e; }
+    .btn-new {
+      padding: 6px 14px; background: #1a3c5e; color: #fff; border: none;
+      border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;
+      margin-left: auto; white-space: nowrap;
+    }
+    .btn-new:hover { background: #245082; }
+
+    /* Table */
+    .tpl-table { width: 100%; border-collapse: collapse; }
+    .tpl-table th {
+      text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: #888; border-bottom: 1px solid #dde3ea;
+      padding: 6px 10px; background: #fff;
+    }
+    .tpl-table td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+    .tpl-table tr:hover td { background: #f7f9fc; }
+    .tpl-table tr:last-child td { border-bottom: none; }
+    .tpl-empty { text-align: center; color: #aaa; padding: 32px; font-size: 13px; }
+
+    .badge {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .badge-global        { background: #e3f2fd; color: #1565c0; }
+    .badge-prestador     { background: #e8f5e9; color: #2e7d32; }
+    .badge-cliente       { background: #fff3e0; color: #e65100; }
+
+    .tpl-nome { font-weight: 600; font-size: 13px; }
+    .tpl-desc { font-size: 11px; color: #888; margin-top: 2px; }
+    .tpl-meta { font-size: 11px; color: #bbb; }
+    .tpl-serv { font-size: 11px; color: #555; }
+
+    .row-actions { display: flex; gap: 6px; white-space: nowrap; }
+    .btn-edit, .btn-del {
+      padding: 4px 10px; border-radius: 4px; border: none;
+      font-size: 11px; font-weight: 600; cursor: pointer; transition: background .15s;
+    }
+    .btn-edit { background: #e8f0fe; color: #1a3c5e; }
+    .btn-edit:hover { background: #c5d8f7; }
+    .btn-del  { background: #fdecea; color: #c62828; }
+    .btn-del:hover { background: #f7c8c8; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 2000;
+      align-items: flex-start; justify-content: center;
+      padding-top: 40px; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 8px; padding: 22px 24px;
+      width: 640px; max-width: 96vw; margin-bottom: 40px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    }
+    .modal-box h3 { font-size: 15px; margin-bottom: 16px; }
+    .mf { margin-bottom: 10px; }
+    .mf label span.lbl { display: block; font-size: 11px; color: #666; margin-bottom: 3px; }
+    .mf input[type=text], .mf select, .mf textarea {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccc;
+      border-radius: 5px; font-size: 13px; color: #222;
+    }
+    .mf input:focus, .mf select:focus, .mf textarea:focus {
+      outline: none; border-color: #1a3c5e; box-shadow: 0 0 0 2px rgba(26,60,94,.12);
+    }
+    .mf textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+    .mf-row { display: grid; gap: 8px 12px; }
+    .mf-row.g2 { grid-template-columns: 1fr 1fr; }
+    .mf-row.g3 { grid-template-columns: 1fr 1fr 1fr; }
+    .mf-row.g4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .section-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: #888; margin: 14px 0 8px;
+      padding-bottom: 4px; border-bottom: 1px solid #f0f2f5;
+    }
+    .modal-btn-row { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+    .mbtn { padding: 8px 20px; border-radius: 5px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .mbtn.primary { background: #1a3c5e; color: #fff; }
+    .mbtn.primary:hover { background: #245082; }
+    .mbtn.secondary { background: #f0f2f5; color: #444; border: 1px solid #d0d5dd; }
+    .mbtn.secondary:hover { background: #e4e8ef; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: #1a3c5e; color: #fff; padding: 10px 16px;
+      border-radius: 6px; font-size: 12px; max-width: 320px;
+      z-index: 3000; box-shadow: 0 4px 12px rgba(0,0,0,.25); display: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ContaTools</h1>
+  <nav>
+    <a href="./">NFS-e</a>
+    <a href="pessoas-fisicas-ui">Pessoas Físicas</a>
+    <a href="templates-ui" class="active">Templates</a>
+  </nav>
+  <span class="version" id="app-version"></span>
+</header>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">Autenticação</div>
+      <input id="token-input" type="password" placeholder="Bearer token" autocomplete="off"
+             onkeydown="if(event.key==='Enter') salvarToken()">
+      <div class="sb-btn-row">
+        <button class="sb-btn primary" onclick="salvarToken()">Conectar</button>
+        <button class="sb-btn secondary" onclick="limparToken()">Sair</button>
+      </div>
+      <div class="sb-status" id="token-status"></div>
+    </div>
+
+    <hr class="sb-divider hidden" id="sb-divider">
+
+    <div class="sb-section hidden" id="sec-filtros">
+      <div class="sb-title">Filtrar por prestador</div>
+      <select id="fil-prestador" onchange="aplicarFiltro()">
+        <option value="">Todos</option>
+      </select>
+      <div style="margin-top:10px;">
+        <div class="sb-title">Filtrar por categoria</div>
+        <select id="fil-categoria" onchange="aplicarFiltro()">
+          <option value="">Todas</option>
+          <option value="prestador_cliente">Prestador-cliente</option>
+          <option value="prestador">Do prestador</option>
+          <option value="global">Global</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-area">
+
+    <div class="toolbar hidden" id="toolbar">
+      <input type="text" id="busca" placeholder="Buscar por nome..." oninput="aplicarFiltro()">
+      <select id="fil-cat-bar" onchange="aplicarFiltro()">
+        <option value="">Todas as categorias</option>
+        <option value="prestador_cliente">Prestador-cliente</option>
+        <option value="prestador">Do prestador</option>
+        <option value="global">Global</option>
+      </select>
+      <button class="btn-new" onclick="abrirModalNovo()">+ Novo template</button>
+    </div>
+
+    <table class="tpl-table hidden" id="tpl-table">
+      <thead>
+        <tr>
+          <th style="width:36%">Nome</th>
+          <th style="width:14%">Categoria</th>
+          <th style="width:22%">Prestador / Tomador</th>
+          <th style="width:18%">Serviço</th>
+          <th style="width:10%"></th>
+        </tr>
+      </thead>
+      <tbody id="tpl-body"></tbody>
+    </table>
+    <div class="tpl-empty hidden" id="tpl-empty">Nenhum template encontrado.</div>
+
+  </div>
+</div>
+
+<!-- Modal criar/editar -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal-box">
+    <h3 id="modal-title">Novo template</h3>
+    <input type="hidden" id="ed-id">
+
+    <div class="mf-row g2">
+      <div class="mf" style="grid-column:span 2;">
+        <label><span class="lbl">Nome <span style="color:#d00">*</span></span>
+          <input type="text" id="ed-nome" maxlength="120" placeholder="Ex: Retainer mensal">
+        </label>
+      </div>
+    </div>
+    <div class="mf">
+      <label><span class="lbl">Descrição (opcional)</span>
+        <input type="text" id="ed-desc" maxlength="250">
+      </label>
+    </div>
+    <div class="mf-row g3">
+      <div class="mf">
+        <label><span class="lbl">Categoria <span style="color:#d00">*</span></span>
+          <select id="ed-categoria">
+            <option value="prestador_cliente">Prestador-cliente</option>
+            <option value="prestador">Do prestador</option>
+            <option value="global">Global</option>
+          </select>
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Prestador (ID)</span>
+          <input type="text" id="ed-prestador-id" placeholder="ex: empresa_xyz">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Serviço (LC 116)</span>
+          <input type="text" id="ed-codigo-servico" placeholder="ex: 1.07">
+        </label>
+      </div>
+    </div>
+
+    <div class="section-title">Tomador</div>
+    <div class="mf-row g2">
+      <div class="mf">
+        <label><span class="lbl">CNPJ</span>
+          <input type="text" id="ed-tomador-cnpj" maxlength="18">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">CPF</span>
+          <input type="text" id="ed-tomador-cpf" maxlength="14">
+        </label>
+      </div>
+    </div>
+    <div class="mf-row g2">
+      <div class="mf" style="grid-column:span 2;">
+        <label><span class="lbl">Razão social / Nome</span>
+          <input type="text" id="ed-tomador-razao">
+        </label>
+      </div>
+    </div>
+    <div class="mf-row g4">
+      <div class="mf" style="grid-column:span 2;">
+        <label><span class="lbl">Logradouro</span>
+          <input type="text" id="ed-tomador-logradouro">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Número</span>
+          <input type="text" id="ed-tomador-numero">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Complemento</span>
+          <input type="text" id="ed-tomador-complemento">
+        </label>
+      </div>
+    </div>
+    <div class="mf-row g4">
+      <div class="mf">
+        <label><span class="lbl">Bairro</span>
+          <input type="text" id="ed-tomador-bairro">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">CEP</span>
+          <input type="text" id="ed-tomador-cep" maxlength="9">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Cód. IBGE</span>
+          <input type="text" id="ed-tomador-ibge" maxlength="7">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">UF</span>
+          <input type="text" id="ed-tomador-uf" maxlength="2" style="text-transform:uppercase;">
+        </label>
+      </div>
+    </div>
+    <div class="mf">
+      <label><span class="lbl">E-mail</span>
+        <input type="text" id="ed-tomador-email">
+      </label>
+    </div>
+
+    <div class="section-title">Serviço e valores</div>
+    <div class="mf-row g3">
+      <div class="mf">
+        <label><span class="lbl">CNAE</span>
+          <input type="text" id="ed-codigo-cnae" maxlength="9">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Cód. tributação municipal</span>
+          <input type="text" id="ed-cod-trib">
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Valor do serviço (R$)</span>
+          <input type="text" id="ed-valor-servico" placeholder="ex: 1500.00">
+        </label>
+      </div>
+    </div>
+    <div class="mf">
+      <label><span class="lbl">Discriminação dos serviços</span>
+        <textarea id="ed-discriminacao"></textarea>
+      </label>
+    </div>
+    <div class="mf-row g4">
+      <div class="mf">
+        <label><span class="lbl">ISS retido</span>
+          <select id="ed-iss-retido">
+            <option value="">— (não definido)</option>
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
+        </label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Valor ISS (R$)</span>
+          <input type="text" id="ed-valor-iss">
+        </label>
+      </div>
+    </div>
+    <div class="section-title">Retenções federais</div>
+    <div class="mf-row g4">
+      <div class="mf">
+        <label><span class="lbl">PIS (R$)</span><input type="text" id="ed-valor-pis"></label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">COFINS (R$)</span><input type="text" id="ed-valor-cofins"></label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">INSS (R$)</span><input type="text" id="ed-valor-inss"></label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">IRRF (R$)</span><input type="text" id="ed-valor-ir"></label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">CSLL (R$)</span><input type="text" id="ed-valor-csll"></label>
+      </div>
+      <div class="mf">
+        <label><span class="lbl">Outras (R$)</span><input type="text" id="ed-valor-outras"></label>
+      </div>
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="mbtn secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="mbtn primary" onclick="salvarTemplate()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  fetch('version').then(r => r.json()).then(d => {
+    document.getElementById('app-version').textContent = 'v' + d.version;
+  }).catch(() => {});
+
+  let TOKEN = localStorage.getItem('nfse_token') || '';
+  let _todosTemplates = [];
+  let _prestadores = [];
+
+  // ── Auth ─────────────────────────────────────────────────────────
+  function salvarToken() {
+    const v = document.getElementById('token-input').value.trim();
+    if (!v) return;
+    TOKEN = v;
+    localStorage.setItem('nfse_token', v);
+    inicializar();
+  }
+
+  function limparToken() {
+    TOKEN = '';
+    localStorage.removeItem('nfse_token');
+    document.getElementById('token-status').textContent = '';
+    document.getElementById('token-input').value = '';
+    document.getElementById('sb-divider').classList.add('hidden');
+    document.getElementById('sec-filtros').classList.add('hidden');
+    document.getElementById('toolbar').classList.add('hidden');
+    document.getElementById('tpl-table').classList.add('hidden');
+    document.getElementById('tpl-empty').classList.add('hidden');
+  }
+
+  // ── API helper ────────────────────────────────────────────────────
+  async function api(method, path, body) {
+    const r = await fetch(path, {
+      method,
+      headers: {
+        'Authorization': 'Bearer ' + TOKEN,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (r.status === 204) return null;
+    const data = await r.json().catch(() => ({ detail: r.statusText }));
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    return data;
+  }
+
+  // ── Inicialização ─────────────────────────────────────────────────
+  async function inicializar() {
+    const statusEl = document.getElementById('token-status');
+    statusEl.style.color = '#888';
+    statusEl.textContent = 'Conectando...';
+    try {
+      const [templates, prestadores] = await Promise.all([
+        api('GET', 'templates'),
+        api('GET', 'prestadores'),
+      ]);
+      _todosTemplates = templates;
+      _prestadores = prestadores;
+
+      // Preenche filtro prestador
+      const sel = document.getElementById('fil-prestador');
+      sel.innerHTML = '<option value="">Todos</option>';
+      prestadores.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.nome;
+        sel.appendChild(opt);
+      });
+
+      document.getElementById('sb-divider').classList.remove('hidden');
+      document.getElementById('sec-filtros').classList.remove('hidden');
+      document.getElementById('toolbar').classList.remove('hidden');
+
+      statusEl.textContent = '✓ ' + templates.length + ' template(s)';
+      statusEl.style.color = '#2e7d32';
+
+      renderizar(_todosTemplates);
+    } catch (e) {
+      statusEl.textContent = '✗ ' + e.message;
+      statusEl.style.color = '#c62828';
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────
+  function renderizar(lista) {
+    const body = document.getElementById('tpl-body');
+    const table = document.getElementById('tpl-table');
+    const empty = document.getElementById('tpl-empty');
+
+    if (!lista.length) {
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      return;
+    }
+    table.classList.remove('hidden');
+    empty.classList.add('hidden');
+
+    body.innerHTML = '';
+    lista.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div class="tpl-nome">${esc(t.nome)}</div>
+          ${t.descricao ? '<div class="tpl-desc">' + esc(t.descricao) + '</div>' : ''}
+        </td>
+        <td><span class="badge ${badgeClass(t.categoria)}">${badgeLabel(t.categoria)}</span></td>
+        <td class="tpl-meta">
+          ${t.prestador_id ? '<div>' + esc(t.prestador_id) + '</div>' : ''}
+          ${t.tomador_razao_social ? '<div style="font-size:11px;">' + esc(t.tomador_razao_social) + '</div>' : ''}
+          ${t.tomador_cnpj ? '<div style="font-size:10px;color:#bbb;">' + esc(t.tomador_cnpj) + '</div>' : ''}
+          ${t.tomador_cpf  ? '<div style="font-size:10px;color:#bbb;">' + esc(t.tomador_cpf)  + '</div>' : ''}
+        </td>
+        <td class="tpl-serv">
+          ${t.codigo_servico ? '<div>' + esc(t.codigo_servico) + '</div>' : ''}
+          ${t.valor_servico ? '<div>R$ ' + esc(t.valor_servico) + '</div>' : ''}
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="btn-edit" onclick="abrirModalEditar('${esc(t.id)}')">Editar</button>
+            <button class="btn-del"  onclick="excluirTemplate('${esc(t.id)}', '${esc(t.nome)}')">Excluir</button>
+          </div>
+        </td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  function badgeClass(cat) {
+    return { global: 'badge-global', prestador: 'badge-prestador', prestador_cliente: 'badge-cliente' }[cat] || '';
+  }
+  function badgeLabel(cat) {
+    return { global: 'Global', prestador: 'Prestador', prestador_cliente: 'Cliente' }[cat] || cat;
+  }
+
+  // ── Filtro ────────────────────────────────────────────────────────
+  function aplicarFiltro() {
+    const busca    = (document.getElementById('busca').value || '').toLowerCase();
+    const prestid  = document.getElementById('fil-prestador').value;
+    const cat      = document.getElementById('fil-cat-bar').value;
+
+    const filtrado = _todosTemplates.filter(t => {
+      if (busca    && !t.nome.toLowerCase().includes(busca))   return false;
+      if (prestid  && t.prestador_id !== prestid && t.categoria !== 'global') return false;
+      if (cat      && t.categoria !== cat)                       return false;
+      return true;
+    });
+    renderizar(filtrado);
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────
+  function abrirModalNovo() {
+    document.getElementById('modal-title').textContent = 'Novo template';
+    document.getElementById('ed-id').value = '';
+    limparFormModal();
+    document.getElementById('modal-edit').classList.add('open');
+    document.getElementById('ed-nome').focus();
+  }
+
+  function abrirModalEditar(id) {
+    const t = _todosTemplates.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('modal-title').textContent = 'Editar template';
+    document.getElementById('ed-id').value = t.id;
+    preencherFormModal(t);
+    document.getElementById('modal-edit').classList.add('open');
+    document.getElementById('ed-nome').focus();
+  }
+
+  function fecharModal() {
+    document.getElementById('modal-edit').classList.remove('open');
+  }
+
+  function limparFormModal() {
+    const ids = ['ed-nome','ed-desc','ed-prestador-id','ed-codigo-servico',
+      'ed-tomador-cnpj','ed-tomador-cpf','ed-tomador-razao','ed-tomador-logradouro',
+      'ed-tomador-numero','ed-tomador-complemento','ed-tomador-bairro',
+      'ed-tomador-cep','ed-tomador-ibge','ed-tomador-uf','ed-tomador-email',
+      'ed-codigo-cnae','ed-cod-trib','ed-valor-servico','ed-discriminacao',
+      'ed-valor-iss','ed-valor-pis','ed-valor-cofins','ed-valor-inss',
+      'ed-valor-ir','ed-valor-csll','ed-valor-outras'];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('ed-categoria').value = 'prestador_cliente';
+    document.getElementById('ed-iss-retido').value = '';
+  }
+
+  function preencherFormModal(t) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+    set('ed-nome', t.nome);
+    set('ed-desc', t.descricao);
+    set('ed-categoria', t.categoria);
+    set('ed-prestador-id', t.prestador_id);
+    set('ed-codigo-servico', t.codigo_servico);
+    set('ed-tomador-cnpj', t.tomador_cnpj);
+    set('ed-tomador-cpf', t.tomador_cpf);
+    set('ed-tomador-razao', t.tomador_razao_social);
+    set('ed-tomador-logradouro', t.tomador_logradouro);
+    set('ed-tomador-numero', t.tomador_numero);
+    set('ed-tomador-complemento', t.tomador_complemento);
+    set('ed-tomador-bairro', t.tomador_bairro);
+    set('ed-tomador-cep', t.tomador_cep);
+    set('ed-tomador-ibge', t.tomador_municipio_ibge);
+    set('ed-tomador-uf', t.tomador_uf);
+    set('ed-tomador-email', t.tomador_email);
+    set('ed-codigo-cnae', t.codigo_cnae);
+    set('ed-cod-trib', t.codigo_tributacao_municipio);
+    set('ed-valor-servico', t.valor_servico);
+    set('ed-discriminacao', t.discriminacao);
+    document.getElementById('ed-iss-retido').value =
+      t.iss_retido === null || t.iss_retido === undefined ? '' : String(t.iss_retido);
+    set('ed-valor-iss', t.valor_iss);
+    set('ed-valor-pis', t.valor_pis);
+    set('ed-valor-cofins', t.valor_cofins);
+    set('ed-valor-inss', t.valor_inss);
+    set('ed-valor-ir', t.valor_ir);
+    set('ed-valor-csll', t.valor_csll);
+    set('ed-valor-outras', t.valor_outras_retencoes);
+  }
+
+  function coletarFormModal() {
+    const g = id => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
+    const issRaw = document.getElementById('ed-iss-retido').value;
+    return {
+      nome:                       document.getElementById('ed-nome').value.trim(),
+      descricao:                  g('ed-desc'),
+      categoria:                  document.getElementById('ed-categoria').value,
+      prestador_id:               g('ed-prestador-id'),
+      codigo_servico:             g('ed-codigo-servico'),
+      tomador_cnpj:               g('ed-tomador-cnpj'),
+      tomador_cpf:                g('ed-tomador-cpf'),
+      tomador_razao_social:       g('ed-tomador-razao'),
+      tomador_logradouro:         g('ed-tomador-logradouro'),
+      tomador_numero:             g('ed-tomador-numero'),
+      tomador_complemento:        g('ed-tomador-complemento'),
+      tomador_bairro:             g('ed-tomador-bairro'),
+      tomador_cep:                g('ed-tomador-cep'),
+      tomador_municipio_ibge:     g('ed-tomador-ibge'),
+      tomador_uf:                 g('ed-tomador-uf'),
+      tomador_email:              g('ed-tomador-email'),
+      codigo_cnae:                g('ed-codigo-cnae'),
+      codigo_tributacao_municipio: g('ed-cod-trib'),
+      valor_servico:              g('ed-valor-servico'),
+      discriminacao:              g('ed-discriminacao'),
+      iss_retido:                 issRaw === '' ? null : issRaw === 'true',
+      valor_iss:                  g('ed-valor-iss'),
+      valor_pis:                  g('ed-valor-pis'),
+      valor_cofins:               g('ed-valor-cofins'),
+      valor_inss:                 g('ed-valor-inss'),
+      valor_ir:                   g('ed-valor-ir'),
+      valor_csll:                 g('ed-valor-csll'),
+      valor_outras_retencoes:     g('ed-valor-outras'),
+    };
+  }
+
+  async function salvarTemplate() {
+    const body = coletarFormModal();
+    if (!body.nome) {
+      document.getElementById('ed-nome').focus();
+      return;
+    }
+    const id = document.getElementById('ed-id').value;
+    try {
+      if (id) {
+        await api('PUT', 'templates/' + id, body);
+        mostrarToast('Template atualizado.');
+      } else {
+        await api('POST', 'templates', body);
+        mostrarToast('Template criado.');
+      }
+      fecharModal();
+      await recarregar();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    }
+  }
+
+  async function excluirTemplate(id, nome) {
+    if (!confirm('Excluir template "' + nome + '"?')) return;
+    try {
+      await api('DELETE', 'templates/' + id);
+      mostrarToast('Template excluído.');
+      await recarregar();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    }
+  }
+
+  async function recarregar() {
+    _todosTemplates = await api('GET', 'templates');
+    document.getElementById('token-status').textContent =
+      '✓ ' + _todosTemplates.length + ' template(s)';
+    aplicarFiltro();
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────
+  function mostrarToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.display = 'block';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.style.display = 'none'; }, 4000);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                          .replace(/"/g,'&quot;');
+  }
+
+  // Fechar modal ao clicar no overlay
+  document.getElementById('modal-edit').addEventListener('click', function(e) {
+    if (e.target === this) fecharModal();
+  });
+
+  // ── Auto-login ────────────────────────────────────────────────────
+  if (TOKEN) {
+    document.getElementById('token-input').value = TOKEN;
+    inicializar();
+  }
+</script>
+
+</body>
+</html>

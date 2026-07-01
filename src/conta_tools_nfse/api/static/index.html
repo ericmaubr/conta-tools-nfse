@@ -42,6 +42,57 @@
     nav a:hover { background: rgba(255,255,255,.1); color: #fff; }
     nav a.active { background: rgba(255,255,255,.18); color: #fff; font-weight: 600; }
 
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: #1a3c5e; color: #fff;
+      padding: 10px 16px; border-radius: 6px;
+      font-size: 12px; line-height: 1.4;
+      max-width: 320px; z-index: 3000;
+      box-shadow: 0 4px 12px rgba(0,0,0,.25);
+      display: none;
+      animation: fadeInUp .2s ease;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Modal template ── */
+    #modal-tpl {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 2000;
+      align-items: center; justify-content: center;
+    }
+    #modal-tpl.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 8px;
+      padding: 20px 22px; width: 440px; max-width: 94vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    }
+    .modal-box h3 { font-size: 14px; margin-bottom: 14px; }
+    .modal-field { margin-bottom: 10px; }
+    .modal-field label span { display: block; font-size: 11px; color: #666; margin-bottom: 3px; }
+    .modal-field input, .modal-field textarea, .modal-field select {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccc;
+      border-radius: 5px; font-size: 13px; color: #222;
+    }
+    .modal-field input:focus, .modal-field select:focus {
+      outline: none; border-color: #1a3c5e;
+      box-shadow: 0 0 0 2px rgba(26,60,94,.12);
+    }
+    .modal-radio-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .modal-radio-row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+    .modal-radio-row input { margin-top: 2px; flex-shrink: 0; }
+    .modal-radio-label { font-size: 12px; }
+    .modal-radio-desc { font-size: 11px; color: #888; }
+    .modal-btn-row { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+    .modal-btn { padding: 7px 18px; border-radius: 5px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .modal-btn.primary { background: #1a3c5e; color: #fff; }
+    .modal-btn.primary:hover { background: #245082; }
+    .modal-btn.secondary { background: #f0f2f5; color: #444; border: 1px solid #d0d5dd; }
+    .modal-btn.secondary:hover { background: #e4e8ef; }
+
     /* ── Layout: sidebar + main ── */
     .layout {
       flex: 1;
@@ -259,6 +310,7 @@
   <nav>
     <a href="./" class="active">NFS-e</a>
     <a href="pessoas-fisicas-ui">Pessoas Físicas</a>
+    <a href="templates-ui">Templates</a>
   </nav>
   <span class="version" id="app-version"></span>
 </header>
@@ -294,6 +346,14 @@
         <input type="number" id="numero_rps" min="1" placeholder="—">
         <span class="rps-loading hidden" id="rps-loading">buscando...</span>
       </div>
+    </div>
+
+    <!-- Template (oculto até prestador selecionado e templates disponíveis) -->
+    <div class="sb-section hidden" id="sec-template">
+      <div class="sb-title">Template</div>
+      <select id="sel-template" onchange="onTemplateChange()">
+        <option value="">Nenhum (sem template)</option>
+      </select>
     </div>
 
   </aside>
@@ -520,6 +580,8 @@
   // ── Estado ──────────────────────────────────────────────────────
   let TOKEN = localStorage.getItem('nfse_token') || '';
   let currentSchema = null;
+  let _templates = {};       // id → template object
+  let _lastEmissaoData = null;  // dados capturados no último submit bem-sucedido
 
   // Pré-preenche competência com mês atual
   (function () {
@@ -543,6 +605,7 @@
     document.getElementById('form').classList.add('hidden');
     document.getElementById('sec-prestador-sb').classList.add('hidden');
     document.getElementById('sb-divider').classList.add('hidden');
+    document.getElementById('sec-template').classList.add('hidden');
     document.getElementById('token-status').textContent = '';
     document.getElementById('token-input').value = '';
     document.getElementById('resultado').classList.add('hidden');
@@ -599,7 +662,11 @@
   // ── Ao selecionar prestador ──────────────────────────────────────
   async function onPrestadorChange() {
     const id = document.getElementById('sel-prestador').value;
-    if (!id) { currentSchema = null; return; }
+    if (!id) {
+      currentSchema = null;
+      document.getElementById('sec-template').classList.add('hidden');
+      return;
+    }
 
     try {
       const schema = await api('GET', 'prestadores/' + id);
@@ -611,6 +678,9 @@
         document.getElementById('codigo_servico').value = schema.codigo_servico;
       limparTomador();
       document.getElementById('resultado').classList.add('hidden');
+      document.getElementById('sel-template').value = '';
+
+      carregarTemplates(id);
 
       // Busca próximo RPS de forma assíncrona
       document.getElementById('numero_rps').value = '';
@@ -763,6 +833,8 @@
       valor_outras_retencoes: document.getElementById('valor_outras_retencoes').value || '0',
     };
 
+    _lastEmissaoData = { ...body };
+
     try {
       const r = await api('POST', 'nfse', body);
 
@@ -796,6 +868,12 @@
     if (r.link_consulta) h += '<div style="margin-top:4px;"><a href="' + r.link_consulta + '" target="_blank" style="color:#1a5c2e;font-size:11px;">Ver na prefeitura ↗</a></div>';
     if (r.arquivo)       h += '<div style="margin-top:3px;font-size:11px;color:#555;">XML: ' + r.arquivo + '</div>';
     if (r.rps_ajustado)  h += '<div class="aviso">⚠ RPS ajustado de <strong>' + r.rps_ajustado.de + '</strong> → <strong>' + r.rps_ajustado.para + '</strong></div>';
+    h += '<div style="margin-top:8px;">'
+       + '<button type="button" onclick="abrirModalTemplate()" '
+       + 'style="font-size:11px;padding:4px 10px;border:1px solid #2e7d32;border-radius:4px;'
+       + 'background:none;color:#2e7d32;cursor:pointer;" '
+       + 'title="Salvar os dados desta NF como template reutilizável">Salvar como template</button>'
+       + '</div>';
     div.innerHTML = h;
     div.classList.remove('hidden');
   }
@@ -993,12 +1071,245 @@
     if (cpf && !cnpj) atualizarRetencoes('cpf');
   });
 
+  // ── Toast ────────────────────────────────────────────────────────
+  function mostrarToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.animation = 'none';
+    el.offsetHeight; // reflow
+    el.style.animation = '';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.style.display = 'none'; }, 4500);
+  }
+
+  // ── Templates ────────────────────────────────────────────────────
+  async function carregarTemplates(prestador_id) {
+    _templates = {};
+    document.getElementById('sec-template').classList.add('hidden');
+    try {
+      const lista = await api('GET', 'templates?prestador_id=' + encodeURIComponent(prestador_id));
+      const sel = document.getElementById('sel-template');
+      sel.innerHTML = '<option value="">Nenhum (sem template)</option>';
+      lista.forEach(t => {
+        _templates[t.id] = t;
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        const badge = { global: '[Global]', prestador: '[Prestador]', prestador_cliente: '[Cliente]' }[t.categoria] || '';
+        opt.textContent = badge + ' ' + t.nome;
+        sel.appendChild(opt);
+      });
+      if (lista.length > 0) {
+        document.getElementById('sec-template').classList.remove('hidden');
+      }
+    } catch (e) {
+      // Templates são opcionais — erro silencioso
+    }
+  }
+
+  function onTemplateChange() {
+    const id = document.getElementById('sel-template').value;
+    if (!id) return;
+    const t = _templates[id];
+    if (!t) return;
+    aplicarTemplate(t);
+  }
+
+  function aplicarTemplate(t) {
+    const mapeamento = [
+      ['tomador_cnpj', t.tomador_cnpj],
+      ['tomador_cpf', t.tomador_cpf],
+      ['tomador_razao_social', t.tomador_razao_social],
+      ['tomador_email', t.tomador_email],
+      ['tomador_logradouro', t.tomador_logradouro],
+      ['tomador_numero', t.tomador_numero],
+      ['tomador_complemento', t.tomador_complemento],
+      ['tomador_bairro', t.tomador_bairro],
+      ['tomador_cep', t.tomador_cep],
+      ['tomador_uf', t.tomador_uf],
+      ['tomador_municipio_ibge', t.tomador_municipio_ibge],
+      ['discriminacao', t.discriminacao],
+      ['codigo_servico', t.codigo_servico],
+      ['codigo_tributacao_municipio', t.codigo_tributacao_municipio],
+      ['valor_servico', t.valor_servico],
+      ['valor_pis', t.valor_pis],
+      ['valor_cofins', t.valor_cofins],
+      ['valor_inss', t.valor_inss],
+      ['valor_ir', t.valor_ir],
+      ['valor_csll', t.valor_csll],
+      ['valor_outras_retencoes', t.valor_outras_retencoes],
+    ];
+
+    let preenchidos = 0;
+    mapeamento.forEach(([id, val]) => {
+      if (val !== null && val !== undefined && val !== '') {
+        const el = document.getElementById(id);
+        if (el) { el.value = val; preenchidos++; }
+      }
+    });
+
+    // CNAE precisa de tratamento especial
+    if (t.codigo_cnae) {
+      const cnaeInp = document.getElementById('codigo_cnae');
+      const cnaeSel = document.getElementById('cnae-select');
+      if (cnaeInp) {
+        cnaeInp.value = t.codigo_cnae;
+        preenchidos++;
+        if (cnaeSel && cnaeSel.style.display !== 'none') {
+          let found = false;
+          for (const opt of cnaeSel.options) {
+            if (opt.value === t.codigo_cnae) { cnaeSel.value = t.codigo_cnae; found = true; break; }
+          }
+          if (!found) {
+            cnaeSel.value = '_manual';
+            const manualInp = document.getElementById('cnae-manual');
+            if (manualInp) { manualInp.classList.remove('hidden'); manualInp.value = t.codigo_cnae; }
+          }
+        }
+      }
+    }
+
+    // ISS retido
+    if (t.iss_retido !== null && t.iss_retido !== undefined) {
+      const cb = document.getElementById('iss_retido');
+      cb.checked = t.iss_retido;
+      onIssRetidoChange();
+      if (t.iss_retido && t.valor_iss) {
+        document.getElementById('valor_iss').value = t.valor_iss;
+      }
+      preenchidos++;
+    }
+
+    mostrarToast('Template "' + t.nome + '" aplicado — ' + preenchidos + ' campo(s) preenchido(s).');
+  }
+
+  // ── Modal: salvar como template ───────────────────────────────────
+  function abrirModalTemplate() {
+    if (!_lastEmissaoData) return;
+    // Limpa campos
+    document.getElementById('tpl-nome').value = '';
+    document.getElementById('tpl-desc').value = '';
+    // Pre-selecionar categoria mais específica
+    const temTomador = !!(_lastEmissaoData.tomador_cnpj || _lastEmissaoData.tomador_cpf);
+    const catDefault = temTomador ? 'prestador_cliente' : 'prestador';
+    document.querySelectorAll('input[name="tpl-cat"]').forEach(r => {
+      r.checked = r.value === catDefault;
+    });
+    document.getElementById('modal-tpl').classList.add('open');
+    setTimeout(() => document.getElementById('tpl-nome').focus(), 50);
+  }
+
+  function fecharModalTemplate() {
+    document.getElementById('modal-tpl').classList.remove('open');
+  }
+
+  async function salvarTemplate() {
+    const nome = document.getElementById('tpl-nome').value.trim();
+    if (!nome) {
+      document.getElementById('tpl-nome').focus();
+      return;
+    }
+    const categoria = document.querySelector('input[name="tpl-cat"]:checked')?.value;
+    if (!categoria) return;
+
+    const d = _lastEmissaoData;
+    const body = {
+      nome,
+      descricao: document.getElementById('tpl-desc').value.trim() || null,
+      categoria,
+      prestador_id: (categoria !== 'global') ? d.prestador_id : null,
+      tomador_cnpj: d.tomador_cnpj || null,
+      tomador_cpf: d.tomador_cpf || null,
+      tomador_razao_social: d.tomador_razao_social || null,
+      tomador_email: d.tomador_email || null,
+      tomador_logradouro: d.tomador_logradouro || null,
+      tomador_numero: d.tomador_numero || null,
+      tomador_complemento: d.tomador_complemento || null,
+      tomador_bairro: d.tomador_bairro || null,
+      tomador_cep: d.tomador_cep || null,
+      tomador_municipio_ibge: d.tomador_municipio_ibge || null,
+      tomador_uf: d.tomador_uf || null,
+      discriminacao: d.discriminacao || null,
+      codigo_servico: d.codigo_servico || null,
+      codigo_cnae: d.codigo_cnae || null,
+      codigo_tributacao_municipio: d.codigo_tributacao_municipio || null,
+      valor_servico: d.valor_servico || null,
+      iss_retido: d.iss_retido ?? null,
+      valor_iss: d.valor_iss || null,
+      valor_pis: d.valor_pis || null,
+      valor_cofins: d.valor_cofins || null,
+      valor_inss: d.valor_inss || null,
+      valor_ir: d.valor_ir || null,
+      valor_csll: d.valor_csll || null,
+      valor_outras_retencoes: d.valor_outras_retencoes || null,
+    };
+
+    try {
+      await api('POST', 'templates', body);
+      fecharModalTemplate();
+      mostrarToast('Template "' + nome + '" salvo com sucesso.');
+      // Recarregar lista de templates
+      if (d.prestador_id) carregarTemplates(d.prestador_id);
+    } catch (e) {
+      alert('Erro ao salvar template: ' + e.message);
+    }
+  }
+
+  // Fechar modal ao clicar no overlay
+  document.getElementById('modal-tpl').addEventListener('click', function(e) {
+    if (e.target === this) fecharModalTemplate();
+  });
+
   // ── Auto-login ───────────────────────────────────────────────────
   if (TOKEN) {
     document.getElementById('token-input').value = TOKEN;
     inicializar();
   }
 </script>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal: salvar como template -->
+<div id="modal-tpl">
+  <div class="modal-box">
+    <h3>Salvar como template</h3>
+    <div class="modal-field">
+      <label><span>Nome <span style="color:#d00">*</span></span>
+        <input type="text" id="tpl-nome" placeholder="Ex: Retainer mensal, Projeto avulso..." maxlength="120">
+      </label>
+    </div>
+    <div class="modal-field">
+      <label><span>Descrição (opcional)</span>
+        <input type="text" id="tpl-desc" placeholder="Detalhe adicional sobre este template" maxlength="250">
+      </label>
+    </div>
+    <div class="modal-field">
+      <span style="display:block;font-size:11px;color:#666;margin-bottom:6px;">Categoria</span>
+      <div class="modal-radio-group" id="tpl-cat-group">
+        <label class="modal-radio-row">
+          <input type="radio" name="tpl-cat" value="prestador_cliente">
+          <span class="modal-radio-label">Prestador-cliente<br>
+            <span class="modal-radio-desc">Vinculado a este prestador e este tomador</span></span>
+        </label>
+        <label class="modal-radio-row">
+          <input type="radio" name="tpl-cat" value="prestador">
+          <span class="modal-radio-label">Do prestador<br>
+            <span class="modal-radio-desc">Vinculado a este prestador, qualquer tomador</span></span>
+        </label>
+        <label class="modal-radio-row">
+          <input type="radio" name="tpl-cat" value="global">
+          <span class="modal-radio-label">Global<br>
+            <span class="modal-radio-desc">Disponível para qualquer prestador</span></span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-btn-row">
+      <button class="modal-btn secondary" onclick="fecharModalTemplate()">Cancelar</button>
+      <button class="modal-btn primary" onclick="salvarTemplate()">Salvar template</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

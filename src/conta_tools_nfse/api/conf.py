@@ -15,6 +15,7 @@ class ApiConf:
     prestadores_dir: Path
     cnpj_api_url: str = ""              # URL do conta-tools-cnpj, ex: http://127.0.0.1:8765
     db_pessoas_fisicas: Path | None = None  # SQLite de pessoas físicas
+    db_templates: Path | None = None        # SQLite de templates de emissão
     # Alíquotas-padrão de retenção (podem ser sobrescritas por prestador)
     aliq_iss: float = 5.00
     aliq_pis: float = 0.65
@@ -72,6 +73,10 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
     db_pf_raw = pf_sec.get("db_path", "").strip()
     db_pessoas_fisicas = Path(db_pf_raw) if db_pf_raw else None
 
+    tpl_sec = cfg["templates"] if "templates" in cfg else {}
+    db_tpl_raw = tpl_sec.get("db_path", "").strip()
+    db_templates = Path(db_tpl_raw) if db_tpl_raw else None
+
     ret_sec = cfg["retencoes"] if "retencoes" in cfg else {}
 
     def _aliq(key: str, default: float) -> float:
@@ -90,6 +95,7 @@ def carregar_api_conf(caminho: Path) -> ApiConf:
         prestadores_dir=prestadores_dir,
         cnpj_api_url=cnpj_api_url,
         db_pessoas_fisicas=db_pessoas_fisicas,
+        db_templates=db_templates,
         aliq_iss=_aliq("aliq_iss", 5.00),
         aliq_pis=_aliq("aliq_pis", 0.65),
         aliq_cofins=_aliq("aliq_cofins", 3.00),
