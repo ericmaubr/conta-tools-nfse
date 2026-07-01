@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conta-tools-nfse"
-version = "0.5.10"
+version = "0.5.11"
 description = "Emissão de NFS-e via webservices SOAP das prefeituras"
 requires-python = ">=3.11"
 authors = [{ name = "Eric Mauricio" }]

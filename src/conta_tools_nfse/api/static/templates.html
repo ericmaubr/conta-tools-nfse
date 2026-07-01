@@ -234,12 +234,6 @@
 
     <div class="toolbar hidden" id="toolbar-filtros">
       <input type="text" id="busca" placeholder="Buscar por nome..." oninput="aplicarFiltro()">
-      <select id="fil-cat-bar" onchange="aplicarFiltro()">
-        <option value="">Todas as categorias</option>
-        <option value="prestador_cliente">Prestador-cliente</option>
-        <option value="prestador">Do prestador</option>
-        <option value="global">Global</option>
-      </select>
     </div>
 
     <table class="tpl-table hidden" id="tpl-table">
@@ -592,14 +586,14 @@
 
   // ── Filtro ────────────────────────────────────────────────────────
   function aplicarFiltro() {
-    const busca    = (document.getElementById('busca').value || '').toLowerCase();
-    const prestid  = document.getElementById('fil-prestador').value;
-    const cat      = document.getElementById('fil-cat-bar').value;
+    const busca   = (document.getElementById('busca').value || '').toLowerCase();
+    const prestid = document.getElementById('fil-prestador').value;
+    const cat     = document.getElementById('fil-categoria').value;
 
     const filtrado = _todosTemplates.filter(t => {
-      if (busca    && !t.nome.toLowerCase().includes(busca))   return false;
-      if (prestid  && t.prestador_id !== prestid && t.categoria !== 'global') return false;
-      if (cat      && t.categoria !== cat)                       return false;
+      if (busca   && !t.nome.toLowerCase().includes(busca))              return false;
+      if (prestid && t.prestador_id !== prestid && t.categoria !== 'global') return false;
+      if (cat     && t.categoria !== cat)                                return false;
       return true;
     });
     renderizar(filtrado);
